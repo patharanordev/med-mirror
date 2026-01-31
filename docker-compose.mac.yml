@@ -2,16 +2,16 @@ version: '3.8'
 
 services:
   # ---------------------------------------------------------
-  # 1. Frontend: The Web Interface
+  # 1. Frontend: The Web Interface (Dockerized Next.js)
   # ---------------------------------------------------------
   frontend:
-    image: nginx:alpine
+    build:
+      context: ./client
+      dockerfile: Dockerfile
     container_name: med_mirror_frontend
     restart: unless-stopped
     ports:
-      - "3000:80"
-    volumes:
-      - ./client:/usr/share/nginx/html
+      - "3000:3000"
     networks:
       - edge_net
 
@@ -33,15 +33,14 @@ services:
     environment:
       - PORT=8000
       - MODEL_PATH=/app/models/segmentation
-      # No NVIDIA vars needed
 
   # ---------------------------------------------------------
-  # 3. Medical Agent Service (LangGraph)
+  # 3. Medical Agent Service (LangGraph - macOS Optimized)
   # ---------------------------------------------------------
   agent:
     build:
       context: ./agent
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.mac
     container_name: med_mirror_agent
     restart: unless-stopped
     ports:
@@ -66,7 +65,6 @@ services:
       - "11434:11434"
     networks:
       - edge_net
-    # No deployment resources - Ollama handles CPU fallback on Mac Docker automatically
     volumes:
       - ollama_storage:/root/.ollama
 
