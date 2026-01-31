@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
 )
 
 echo 2. Stopping old services...
-docker-compose down
+docker compose -f docker-compose.win.yml down
 
 echo 2.1 Cleaning up dangling images...
 for /f "tokens=*" %%i in ('docker images -q -f "dangling=true"') do docker rmi -f %%i
@@ -21,7 +21,7 @@ echo 2.5 Skipping Model Download...
 echo     (If first time, run download_models.bat first)
 
 echo 3. Building and Starting Services...
-docker-compose up -d --build
+docker compose -f docker-compose.win.yml up -d --build
 
 echo 4. Waiting for Local LLM (Ollama) to start...
 timeout /t 10 /nobreak >nul
