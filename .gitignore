@@ -1,6 +1,15 @@
 # model files
 *.onnx
 
+# ONNX Runtime / Silero VAD (copied from node_modules during Docker build)
+client/public/ort-*.wasm
+client/public/ort-*.mjs
+client/public/ort*.mjs
+client/public/vad.worklet.bundle*.js
+
 # models
 models/*
 !models/.gitkeep
+
+# log
+client/tsc_errors.txt
