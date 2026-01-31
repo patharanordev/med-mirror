@@ -1,45 +1,72 @@
-# MedMirror Edge Setup
+# MedMirror: Multimodal Medical AI Mirror
 
-This project is configured to run **Skin Segmentation** and **MedGemma** (optional) on your local edge device (RTX 4080) using Docker Compose.
+MedMirror is an intelligent, real-time medical analysis platform that transforms your screen into a diagnostic mirror. It combines computer vision (skin segmentation) and multimodal LLMs to provide empathetic, localized dermatological advice.
 
-## 🚀 Quick Start
+---
+
+## 💻 Environment Optimizations
+
+MedMirror is designed to run seamlessly on different hardware by choosing the best inference path:
+
+### 🍎 macOS (Apple Silicon)
+- **Model**: `gemma3n:e2b`
+- **Inference Mode**: **CPU-Only (Dockerized)**
+- **Rationale**: Docker on macOS cannot access the Metal GPU API inside a Linux container. I use the **Gemma 3n (2B optimized)** model because it is lightweight enough to deliver fast, responsive "typing" even when running entirely on the CPU.
+- **Service**: Runs via `docker-compose.mac.yml`.
+
+### 🪟 Windows
+- **Model**: `gemma3:4b`
+- **Inference Mode**: **NVIDIA GPU (RTX 4080)**
+- **Rationale**: Using WSL2 and NVIDIA Container Toolkit, I pass the GPU directly to the Ollama container. This allows the use of the larger **4B parameter** model with massive throughput and sub-second response times.
+- **Service**: Runs via `docker-compose.win.yml`.
+
+---
+
+## 🚀 Getting Started
 
 ### 1. Prerequisites
-Ensure you have the **NVIDIA Container Toolkit** installed so Docker can access your RTX 4080.
-If not, install it:
+- **Docker Desktop** (Mac/Windows)
+- **NVIDIA Drivers & Container Toolkit** (Windows only)
+- **Ollama** (Optional for Host-Mac mode, internal Docker used by default)
+
+### 2. Launching
+
+#### **macOS**
 ```bash
-# Windows (WSL2) or Linux
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+./start.sh
 ```
 
-### 2. Run the App
-Navigate to this directory in your terminal and run:
-
-```bash
-docker-compose up --build
+#### **Windows**
+```powershell
+.\start.ps1
 ```
-*   This will download the base images, install PyTorch/Transformers, and start the services.
-*   The first run will take time (GBs of downloads).
 
-### 3. Usage
-*   **Web Interface**: Open [http://localhost:3000](http://localhost:3000) in your browser.
-    *   Click "Start Camera".
-    *   Click "Analyze Skin" (or toggle "Auto-Segment Stream").
-    *   The backend (port 8000) will download the `segformer` model on the first request. The first request might be slow.
-*   **API Docs**: Open [http://localhost:8000/docs](http://localhost:8000/docs) to see the backend API.
+---
 
-## 🏗 Architecture
+## 🛠 Service Architecture
 
-*   **Frontend**: Nginx serving a high-performance HTML5/JS app. Captures video locally to save bandwidth.
-*   **Segmentation Service**: Python FastAPI using `transformers` and `segformer_b2_clothes`.
-    *   Running on GPU (RTX 4080).
-    *   Returns a transparent PNG mask of the detected skin.
-*   **MedGemma Service** (Optional):
-    *   To enable MedGemma, uncomment the `medgemma` section in `docker-compose.yml`.
-    *   You will need to provide your Hugging Face or Kaggle token to download the weights.
+### 1. Frontend (Next.js 14)
+- **True Mirror Experience**: Live camera feed is horizontally mirrored for natural interaction.
+- **Voice-First**: Integrated **Silero VAD** for automatic speech detection and real-time Thai/English transcription.
+- **Clean UI**: Minimalist design with no overlays, focusing on the camera feed and AI metrics.
 
-## 🔧 Troubleshooting
-*   **"Model not loaded"**: Check the docker logs (`docker-compose logs -f segmentation`). It might still be downloading the model.
-*   **Camera not working**: Ensure your browser allows camera access to `localhost:3000`. Browsers often block non-HTTPS camera access unless it's localhost.
+### 2. Medical Agent (LangGraph + FastAPI)
+- **Hybrid Brain**: Uses a dual-input strategy:
+    - **Quantitative**: Trusts the Segmentation Service for precise surface area measurements.
+    - **Qualitative**: Uses Gemma 3n's vision capabilities to describe patterns, redness, or textures in the image.
+- **Multimodal Flow**: Automatically constructs OpenAI-compatible vision payloads for the LLM.
+
+### 3. Skin Segmentation (SegFormer)
+- **Real-time Detection**: Uses a Transformers-based SegFormer model to identify skin areas at 0.5 FPS - 1 FPS.
+- **Persistent Cache**: Models are cached in `~/.ollama` or `./models` to ensure fast restarts and offline capability.
+
+### 4. LLM Backend (Ollama)
+- **Unified API**: All agents communicate via the Ollama OpenAI-compatibility layer (`/v1`).
+- **Flexible Models**: Easily swappable models (PaliGemma, Gemma 3n, MedGemma) via environment variables.
+
+---
+
+## 📝 Changelog
+- **Mirror Fix**: Both live preview and captured frames are now horizontally flipped to match user intuition.
+- **VAD Stability**: Fixed `InvalidStateError` race conditions in browser SpeechRecognition for smoother Thai voice input.
+- **Gemma 3 Migration**: Switched to the Gemma 3 family for superior medical text comprehension and multimodal reasoning.
