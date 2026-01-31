@@ -1,7 +1,7 @@
-from typing import Dict, Any, List
-
+from typing import Dict, Any, List, Sequence
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 
@@ -16,12 +16,13 @@ SYSTEM_TEMPLATE = """
 บริบทจากการตรวจจับภาพ: {context}
 
 คำแนะนำ:
-1. ถามคำถามที่เป็นประโยชน์ต่อการวินิจฉัย เช่น ระยะเวลาที่เป็น, อาการคัน/เจ็บ, ประวัติการแพ้ยา
-2. ถามทีละคำถาม อย่ายิงคำถามรัว
-3. ใช้ภาษาไทยที่สุภาพ แต่มืออาชีพ
-4. หากข้อมูลเพียงพอแล้ว ให้สรุปคำแนะนำเบื้องต้น และแนะนำให้ไปพบแพทย์ (อย่าฟันธงการรักษาเอง)
+1. หากมีรูปภาพแนบมา ให้วิเคราะห์สิ่งที่เห็นในภาพด้วย (คุณมีความสามารถในการมองเห็น)
+2. ถามคำถามที่เป็นประโยชน์ต่อการวินิจฉัย เช่น ระยะเวลาที่เป็น, อาการคัน/เจ็บ, ประวัติการแพ้ยา
+3. ถามทีละคำถาม อย่ายิงคำถามรัว
+4. ใช้ภาษาไทยที่สุภาพ แต่มืออาชีพ
+5. หากข้อมูลเพียงพอแล้ว ให้สรุปคำแนะนำเบื้องต้น และแนะนำให้ไปพบแพทย์ (อย่าฟันธงการรักษาเอง)
 
-เริ่มการสนทนาโดยอ้างอิงถึงสิ่งที่ตรวจพบในภาพ
+หากคุณได้รับรูปภาพ กรุณารับทราบและอ้างอิงถึงสิ่งที่เห็นด้วย
 """
 
 class AgentService:
@@ -32,24 +33,54 @@ class AgentService:
             model=settings.LLM_MODEL,
             streaming=True
         )
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", SYSTEM_TEMPLATE),
+            MessagesPlaceholder(variable_name="messages"),
+        ])
         self.graph = self._build_graph()
 
-    def _call_model(self, state: AgentState):
-        messages = state['messages']
+    def _gen_multimodal_message(self, text: str, image_url: str) -> HumanMessage:
+        """Constructs a multimodal human message following OpenAI/LangChain best practices."""
+        print(f"DEBUG: Constructing multimodal message. Image length: {len(image_url)}")
+        return HumanMessage(
+            content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_url},
+                },
+                {"type": "text", "text": text},
+            ]
+        )
+
+    async def _call_model(self, state: AgentState):
+        """Node to call the LLM with the current state."""
+        messages = list(state['messages'])
         context = state.get('context', 'ไม่ระบุ')
+        image_url = state.get('image_url')
+
+        print(f"DEBUG: Calling model {settings.LLM_MODEL}. Image present: {bool(image_url)}")
+
+        # If we have an image and the last message is a HumanMessage with just text, 
+        # convert it to multimodal for the LLM call.
+        if image_url and len(messages) > 0:
+            last_message = messages[-1]
+            if isinstance(last_message, HumanMessage) and isinstance(last_message.content, str):
+                messages[-1] = self._gen_multimodal_message(last_message.content, image_url)
+
+        # Build chain: Prompt | LLM
+        chain = self.prompt | self.llm
         
-        # Check if system message exists, if not prepend it
-        if not messages or not isinstance(messages[0], SystemMessage):
-            system_msg = SystemMessage(content=SYSTEM_TEMPLATE.format(context=context))
-            messages = [system_msg] + messages
-        else:
-            # Update context in system prompt if needed
-            messages[0] = SystemMessage(content=SYSTEM_TEMPLATE.format(context=context))
+        # Invoke LLM
+        response = await chain.ainvoke({
+            "messages": messages,
+            "context": context
+        })
         
-        response = self.llm.invoke(messages)
+        # Return new message to be added to state via Annotated[..., add_messages]
         return {"messages": [response]}
 
     def _build_graph(self) -> CompiledStateGraph:
+        """Construct the LangGraph workflow."""
         workflow = StateGraph(AgentState)
         
         workflow.add_node("agent", self._call_model)
@@ -59,7 +90,8 @@ class AgentService:
         return workflow.compile()
 
     def get_graph(self) -> CompiledStateGraph:
+        """Get the compiled graph executable."""
         return self.graph
 
-# Singleton instance to be used by dependencies
+# Singleton instance
 agent_service = AgentService()

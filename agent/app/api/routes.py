@@ -12,32 +12,10 @@ router = APIRouter()
 def health_check():
     return {"status": "Agent is running (Clean Arch)", "service": "MedMirror Agent"}
 
-
-def create_multimodal_message(text: str, image: str = None) -> HumanMessage:
-    """
-    Create a HumanMessage with optional image content for multimodal models.
-    Image should be a base64 data URL (e.g., 'data:image/jpeg;base64,...')
-    """
-    if image:
-        # Multimodal message format for vision models
-        content = [
-            {"type": "text", "text": text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image}
-            }
-        ]
-        return HumanMessage(content=content)
-    else:
-        # Text-only message
-        return HumanMessage(content=text)
-
-
 @router.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     """
-    Streaming endpoint for the medical agent with multimodal support.
-    Accepts optional image (base64 data URL) for vision-based analysis.
+    Streaming endpoint for the medical agent.
     """
     
     # 1. Convert history to LangChain format
@@ -49,14 +27,14 @@ async def chat_endpoint(request: ChatRequest):
             elif msg['role'] == 'assistant':
                 messages.append(AIMessage(content=msg['content']))
     
-    # Add current message (with optional image for multimodal)
-    current_message = create_multimodal_message(request.message, request.image)
-    messages.append(current_message)
+    # Add current message
+    messages.append(HumanMessage(content=request.message))
     
     # 2. Prepare Graph Input
     inputs = {
         "messages": messages,
-        "context": request.context
+        "context": request.context,
+        "image_url": request.image_url
     }
 
     # 3. Stream Generator
@@ -83,4 +61,3 @@ async def chat_endpoint(request: ChatRequest):
             yield f"data: {error_msg}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
-
