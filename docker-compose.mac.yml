@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------
+  # 1. Frontend: The Web Interface
+  # ---------------------------------------------------------
+  frontend:
+    image: nginx:alpine
+    container_name: med_mirror_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./client:/usr/share/nginx/html
+    networks:
+      - edge_net
+
+  # ---------------------------------------------------------
+  # 2. Skin Segmentation Service (CPU / M1 Optimized)
+  # ---------------------------------------------------------
+  segmentation:
+    build: 
+      context: ./segmentation
+      dockerfile: Dockerfile.mac
+    container_name: med_mirror_segmentation
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - edge_net
+    volumes:
+      - ./models:/app/models
+    environment:
+      - PORT=8000
+      - MODEL_PATH=/app/models/segmentation
+      # No NVIDIA vars needed
+
+  # ---------------------------------------------------------
+  # 3. Medical Agent Service (LangGraph)
+  # ---------------------------------------------------------
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: med_mirror_agent
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    networks:
+      - edge_net
+    environment:
+      - LLM_BASE_URL=http://ollama:11434/v1
+      - LLM_API_KEY=ollama
+      - LLM_MODEL=gemma:2b
+    depends_on:
+      - ollama
+
+  # ---------------------------------------------------------
+  # 4. Local LLM Backend (Ollama)
+  # ---------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: med_mirror_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    networks:
+      - edge_net
+    # No deployment resources - Ollama handles CPU fallback on Mac Docker automatically
+    volumes:
+      - ollama_storage:/root/.ollama
+
+volumes:
+  ollama_storage:
+
+networks:
+  edge_net:
+    driver: bridge
