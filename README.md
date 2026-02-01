@@ -29,7 +29,21 @@ MedMirror is designed to run seamlessly on different hardware by choosing the be
 - **NVIDIA Drivers & Container Toolkit** (Windows only)
 - **Ollama** (Optional for Host-Mac mode, internal Docker used by default)
 
-### 2. Launching
+### 2. Pull Gemma Model
+> [!IMPORTANT]
+> You need to pull the Gemma model before starting the application.
+
+#### **macOS**
+```bash
+ollama pull gemma3n:e2b
+```
+
+#### **Windows**
+```powershell
+ollama pull gemma3:4b
+```
+
+### 3. Launching
 
 #### **macOS**
 ```bash
