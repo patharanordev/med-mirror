@@ -99,6 +99,79 @@ export function useVADInput(
         };
     }, []);
 
+    // VAD Callbacks (Memoized to prevent re-init)
+    const handleSpeechStart = useCallback(() => {
+        console.log("VAD: Speech START");
+        isSpeechActiveRef.current = true;
+        setIsSpeechActive(true);
+        setTranscript("Listening...");
+    }, []); // No deps
+
+    const handleVADMisfire = useCallback(() => {
+        console.log("VAD: Misfire");
+        isSpeechActiveRef.current = false;
+        setIsSpeechActive(false);
+        setTranscript("");
+        // Show "again please" indicator
+        setHadMisfire(true);
+        setTimeout(() => setHadMisfire(false), 4000); // Auto-clear after 4 seconds
+    }, []); // No deps
+
+    const handleSpeechEnd = useCallback(async (audio: Float32Array) => {
+        console.log("VAD: Speech END. Processing...");
+        isSpeechActiveRef.current = false;
+        setIsSpeechActive(false);
+
+        if (!audio || audio.length === 0) {
+            setTranscript("");
+            return;
+        }
+
+        setIsProcessing(true);
+        setTranscript("Transcribing...");
+
+        try {
+            // 1. Convert Float32Array to WAV Blob
+            const wavBuffer = utils.encodeWAV(audio);
+            const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+            const file = new File([blob], "speech.wav", { type: "audio/wav" });
+
+            // 2. Upload to Local Whisper Backend
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const response = await fetch("/api/proxy/stt", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) throw new Error("STT Server Error");
+
+            const data = await response.json();
+            const text = data.text?.trim();
+
+            console.log("STT Result:", text);
+
+            if (text && text.length > 0) {
+                setTranscript(text);
+                // Send to Callback (Use Ref to avoid dependency on prop)
+                if (speechEndCallbackRef.current) {
+                    speechEndCallbackRef.current(text);
+                }
+                // Clear after short delay
+                setTimeout(() => setTranscript(""), 2000);
+            } else {
+                setTranscript("");
+            }
+
+        } catch (e) {
+            console.error("STT Error:", e);
+            setTranscript("Error");
+        } finally {
+            setIsProcessing(false);
+        }
+    }, []); // No deps (uses refs internally)
+
     // VAD Logic
     const vad = useMicVAD({
         startOnLoad: true,
@@ -117,83 +190,15 @@ export function useVADInput(
         audioContext: audioContextRef.current || undefined,
 
         // Parameter Tuning
-        positiveSpeechThreshold: 0.65,
-        negativeSpeechThreshold: 0.4,
-        preSpeechPadMs: 400,
-        minSpeechMs: 100,
+        positiveSpeechThreshold: 0.6, // Reverted to default-ish (0.8 was too high)
+        negativeSpeechThreshold: 0.45,
+        preSpeechPadMs: 300,
+        minSpeechMs: 250, // Keep this to reduce clicks/pops
         redemptionMs: 1000,
 
-        onSpeechStart: () => {
-            console.log("VAD: Speech START");
-            isSpeechActiveRef.current = true;
-            setIsSpeechActive(true);
-            setTranscript("Listening...");
-        },
-
-        onVADMisfire: () => {
-            console.log("VAD: Misfire");
-            isSpeechActiveRef.current = false;
-            setIsSpeechActive(false);
-            setTranscript("");
-            // Show "again please" indicator
-            setHadMisfire(true);
-            setTimeout(() => setHadMisfire(false), 2000); // Auto-clear after 2 seconds
-        },
-
-        onSpeechEnd: async (audio) => {
-            console.log("VAD: Speech END. Processing...");
-            isSpeechActiveRef.current = false;
-            setIsSpeechActive(false);
-
-            if (!audio || audio.length === 0) {
-                setTranscript("");
-                return;
-            }
-
-            setIsProcessing(true);
-            setTranscript("Transcribing...");
-
-            try {
-                // 1. Convert Float32Array to WAV Blob
-                const wavBuffer = utils.encodeWAV(audio);
-                const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-                const file = new File([blob], "speech.wav", { type: "audio/wav" });
-
-                // 2. Upload to Local Whisper Backend
-                const formData = new FormData();
-                formData.append("file", file);
-
-                const response = await fetch("/api/proxy/stt", {
-                    method: "POST",
-                    body: formData,
-                });
-
-                if (!response.ok) throw new Error("STT Server Error");
-
-                const data = await response.json();
-                const text = data.text?.trim();
-
-                console.log("STT Result:", text);
-
-                if (text && text.length > 0) {
-                    setTranscript(text);
-                    // Send to Callback
-                    if (speechEndCallbackRef.current) {
-                        speechEndCallbackRef.current(text);
-                    }
-                    // Clear after short delay
-                    setTimeout(() => setTranscript(""), 2000);
-                } else {
-                    setTranscript("");
-                }
-
-            } catch (e) {
-                console.error("STT Error:", e);
-                setTranscript("Error");
-            } finally {
-                setIsProcessing(false);
-            }
-        }
+        onSpeechStart: handleSpeechStart,
+        onVADMisfire: handleVADMisfire,
+        onSpeechEnd: handleSpeechEnd
     });
 
     const toggle = useCallback(() => {

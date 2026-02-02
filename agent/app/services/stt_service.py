@@ -58,8 +58,16 @@ class STTService:
             logger.info("STT: Model not loaded. Loading now (Lazy Load)...")
             self.load_model()
 
+        # Determine language to force
+        # If model is English-only (ends with .en), we must use "en" or let it default.
+        # Otherwise, use the configured AGENT_LANGUAGE (e.g., "th").
+        lang_arg = settings.AGENT_LANGUAGE
+        if settings.STT_MODEL_SIZE.endswith(".en"):
+            lang_arg = "en"
+
         # beam_size=1 for greedy decoding (FASTEST)
-        segments, info = self.model.transcribe(audio_file, beam_size=1)
+        # Force language to prevent auto-detection errors on short audio
+        segments, info = self.model.transcribe(audio_file, beam_size=1, language=lang_arg)
         
         # Collect text
         text = ""

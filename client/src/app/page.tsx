@@ -4,7 +4,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { VideoFeed, VideoFeedRef } from "@/components/VideoFeed";
 import { useMedGemma } from "@/hooks/useMedGemma";
 import { useVADInput } from "@/hooks/useVAD";
-import { Mic, Ear, Activity, Brain, Loader2, Video, Eye } from "lucide-react";
+import { Mic, Ear, Activity, Brain, Loader2, Video, Eye, RefreshCcw } from "lucide-react";
 import { AudioWave } from "@/components/AudioWave";
 import { useSystemStatus } from "@/hooks/useSystemStatus";
 
@@ -137,14 +137,17 @@ export default function Home() {
 
         {/* CENTER BOTTOM AUDIO WAVE */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none">
+          {/* Misfire Indicator - Floating ABOVE the wave (Baseline) */}
+          <div className={`absolute bottom-full mb-6 transition-opacity duration-500 ease-in-out ${hadMisfire ? 'opacity-100' : 'opacity-0'}`}>
+            <span className="text-xl font-bold text-white animate-pulse tracking-widest uppercase drop-shadow-lg whitespace-nowrap">
+              Speak Again Please
+            </span>
+          </div>
+
           <AudioWave isActive={userSpeaking} audioData={audioData} />
           {/* Status Labels */}
           <span className={`text-xs font-mono uppercase tracking-widest transition-opacity duration-300 ${userSpeaking ? 'opacity-100 text-green-400' : 'opacity-0'}`}>
             Listening
-          </span>
-          {/* Misfire Indicator - "Again please?" */}
-          <span className={`text-xs font-mono tracking-wider transition-all duration-300 ${hadMisfire ? 'opacity-100 text-red-400 animate-pulse' : 'opacity-0'}`}>
-            🔄 Again please?
           </span>
         </div>
 
@@ -206,7 +209,7 @@ export default function Home() {
                     <div className="avatar">AI</div>
                     <div className="agent-info">
                       <h4>MedMirror Assistant</h4>
-                      <span className="status">Online • Gemma-2b</span>
+                      <span className="status">Online • {systemStatus.modelName || "Detecting..."}</span>
                     </div>
                   </div>
 

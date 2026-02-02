@@ -8,6 +8,7 @@ const POLL_INTERVAL = 3000; // Poll every 3 seconds
 interface SystemStatus {
     stt: "loading" | "ready" | "error";
     llm: "loading" | "ready" | "error";
+    modelName?: string;
 }
 
 export function useSystemStatus() {
@@ -31,6 +32,7 @@ export function useSystemStatus() {
                     setStatus({
                         stt: data.stt_ready ? "ready" : "loading",
                         llm: data.llm_ready ? "ready" : "loading",
+                        modelName: data.llm_model,
                     });
                 }
             } catch (e) {

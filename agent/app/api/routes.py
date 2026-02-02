@@ -5,6 +5,7 @@ from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage
 
+from app.core.config import settings
 from app.core.models import ChatRequest
 from app.services.agent_graph import agent_service
 from app.services.stt_service import stt_service
@@ -18,7 +19,8 @@ async def root():
     return {
         "status": "ok",
         "stt_ready": stt_service.is_ready,
-        "llm_ready": agent_service.is_ready
+        "llm_ready": agent_service.is_ready,
+        "llm_model": settings.LLM_MODEL
     }
 
 @router.post("/stt")
