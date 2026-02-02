@@ -12,6 +12,8 @@ services:
       - "3000:3000"
     networks:
       - edge_net
+    environment:
+      - AGENT_SERVICE_URL=http://med_mirror_agent:8001
 
   # ---------------------------------------------------------
   # 2. Skin Segmentation Service (CPU / M1 Optimized)

@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Sequence
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 
@@ -38,6 +39,18 @@ class AgentService:
             MessagesPlaceholder(variable_name="messages"),
         ])
         self.graph = self._build_graph()
+        self.is_ready = False
+
+    async def warmup(self):
+        """Forces LLM to load model into VRAM."""
+        print("AGENT: Warming up LLM (Ollama)...")
+        try:
+            # Simple dummy invocation
+            await self.llm.ainvoke("hi")
+            self.is_ready = True
+            print("AGENT: LLM Warmup Complete (Ready). 🧠")
+        except Exception as e:
+            print(f"AGENT: LLM Warmup Failed: {e}")
 
     def _gen_multimodal_message(self, text: str, image_url: str) -> HumanMessage:
         """Constructs a multimodal human message following OpenAI/LangChain best practices."""
@@ -52,7 +65,7 @@ class AgentService:
             ]
         )
 
-    async def _call_model(self, state: AgentState):
+    async def _call_model(self, state: AgentState, config: RunnableConfig):
         """Node to call the LLM with the current state."""
         messages = list(state['messages'])
         context = state.get('context', 'ไม่ระบุ')
@@ -70,11 +83,11 @@ class AgentService:
         # Build chain: Prompt | LLM
         chain = self.prompt | self.llm
         
-        # Invoke LLM
+        # Invoke LLM with the passed config (propagates callbacks/streaming)
         response = await chain.ainvoke({
             "messages": messages,
             "context": context
-        })
+        }, config=config)
         
         # Return new message to be added to state via Annotated[..., add_messages]
         return {"messages": [response]}

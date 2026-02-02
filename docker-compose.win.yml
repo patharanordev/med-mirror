@@ -12,6 +12,8 @@ services:
       - "3000:3000"
     networks:
       - edge_net
+    environment:
+      - AGENT_SERVICE_URL=http://med_mirror_agent:8001
 
   # ---------------------------------------------------------
   # 2. Skin Segmentation Service (NVIDIA Optimized)
@@ -40,7 +42,7 @@ services:
   agent:
     build:
       context: ./agent
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.win
     container_name: med_mirror_agent
     restart: unless-stopped
     ports:
@@ -53,6 +55,13 @@ services:
       - LLM_MODEL=gemma3:4b
     depends_on:
       - ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # ---------------------------------------------------------
   # 4. Local LLM Backend (Ollama)

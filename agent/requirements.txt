@@ -7,3 +7,6 @@ pydantic
 python-dotenv
 tiktoken
 pydantic-settings
+faster-whisper
+python-multipart
+numpy
