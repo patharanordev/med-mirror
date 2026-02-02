@@ -59,7 +59,7 @@ export default function Home() {
     }
   }, [input, sendMessage]);
 
-  const { isListening, userSpeaking, transcript, isSttActive, audioData } = useVADInput(sendMessage, isTyping);
+  const { isListening, userSpeaking, transcript, isSttActive, audioData, hadMisfire } = useVADInput(sendMessage, isTyping);
 
   return (
     <div className="w-screen h-screen bg-black text-white overflow-hidden relative">
@@ -138,8 +138,13 @@ export default function Home() {
         {/* CENTER BOTTOM AUDIO WAVE */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none">
           <AudioWave isActive={userSpeaking} audioData={audioData} />
+          {/* Status Labels */}
           <span className={`text-xs font-mono uppercase tracking-widest transition-opacity duration-300 ${userSpeaking ? 'opacity-100 text-green-400' : 'opacity-0'}`}>
             Listening
+          </span>
+          {/* Misfire Indicator - "Again please?" */}
+          <span className={`text-xs font-mono tracking-wider transition-all duration-300 ${hadMisfire ? 'opacity-100 text-red-400 animate-pulse' : 'opacity-0'}`}>
+            🔄 Again please?
           </span>
         </div>
 

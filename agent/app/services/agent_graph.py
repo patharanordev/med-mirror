@@ -9,23 +9,6 @@ from langgraph.graph.state import CompiledStateGraph
 from app.core.config import settings
 from app.core.models import AgentState
 
-# --- System Prompt (Thai) ---
-SYSTEM_TEMPLATE = """
-คุณคือผู้ช่วยทางการแพทย์อัจฉริยะ 'MedMirror AI'
-หน้าที่ของคุณคือการสัมภาษณ์ผู้ป่วยเพื่อขอข้อมูลเพิ่มเติมเกี่ยวกับอาการทางผิวหนังที่ตรวจพบ
-
-บริบทจากการตรวจจับภาพ: {context}
-
-คำแนะนำ:
-1. หากมีรูปภาพแนบมา ให้วิเคราะห์สิ่งที่เห็นในภาพด้วย (คุณมีความสามารถในการมองเห็น)
-2. ถามคำถามที่เป็นประโยชน์ต่อการวินิจฉัย เช่น ระยะเวลาที่เป็น, อาการคัน/เจ็บ, ประวัติการแพ้ยา
-3. ถามทีละคำถาม อย่ายิงคำถามรัว
-4. ใช้ภาษาไทยที่สุภาพ แต่มืออาชีพ
-5. หากข้อมูลเพียงพอแล้ว ให้สรุปคำแนะนำเบื้องต้น และแนะนำให้ไปพบแพทย์ (อย่าฟันธงการรักษาเอง)
-
-หากคุณได้รับรูปภาพ กรุณารับทราบและอ้างอิงถึงสิ่งที่เห็นด้วย
-"""
-
 class AgentService:
     def __init__(self):
         self.llm = ChatOpenAI(
@@ -34,8 +17,11 @@ class AgentService:
             model=settings.LLM_MODEL,
             streaming=True
         )
+        # Use dynamic system prompt based on AGENT_LANGUAGE env var
+        system_prompt = settings.get_system_prompt()
+        print(f"AGENT: Using language: {settings.AGENT_LANGUAGE}")
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_TEMPLATE),
+            ("system", system_prompt),
             MessagesPlaceholder(variable_name="messages"),
         ])
         self.graph = self._build_graph()

@@ -40,6 +40,18 @@ MedMirror is designed to run seamlessly on different hardware by choosing the be
 - **Inference Mode**: **NVIDIA RTX 4080 Acceleration**
 - **Service**: Runs via `docker-compose.win.yml` with CUDA 12.2 runtime.
 
+### 🔧 Configuration via .env
+You can customize the agent language and STT model size in `.env.local` (or your OS-specific env file):
+
+```env
+# Agent Language (th = Thai, en = English)
+AGENT_LANGUAGE=th
+
+# Whisper STT Model Size 
+# Options: tiny, tiny.en, base, small, medium, large-v3
+STT_MODEL_SIZE=tiny
+```
+
 ---
 
 ## 🚀 Getting Started

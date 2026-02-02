@@ -16,6 +16,7 @@ export function useVADInput(
     // UI State
     const [transcript, setTranscript] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
+    const [hadMisfire, setHadMisfire] = useState(false);
 
     // State mirror for UI
     const [isSpeechActive, setIsSpeechActive] = useState(false);
@@ -134,6 +135,9 @@ export function useVADInput(
             isSpeechActiveRef.current = false;
             setIsSpeechActive(false);
             setTranscript("");
+            // Show "again please" indicator
+            setHadMisfire(true);
+            setTimeout(() => setHadMisfire(false), 2000); // Auto-clear after 2 seconds
         },
 
         onSpeechEnd: async (audio) => {
@@ -204,5 +208,6 @@ export function useVADInput(
         transcript,
         isSttActive: !vad.errored && !vad.loading, // Simplification
         audioData: audioDataForUi,
+        hadMisfire, // Expose misfire state for UI indicator
     };
 }

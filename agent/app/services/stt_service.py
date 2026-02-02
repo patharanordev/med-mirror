@@ -1,6 +1,7 @@
 import os
 import logging
 from faster_whisper import WhisperModel
+from app.core.config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +29,8 @@ class STTService:
         if self.model:
             return
 
-        model_size = "tiny.en"
+        model_size = settings.STT_MODEL_SIZE
+        logger.info(f"STT: Using model size: {model_size}")
         
         # 1. Try Loading with CUDA (Windows/Linux GPU)
         try:
