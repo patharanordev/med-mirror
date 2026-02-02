@@ -50,7 +50,16 @@ async function handler(req: NextRequest, { params }: { params: Promise<{ path: s
             headers: resHeaders,
         });
 
-    } catch (error) {
+    } catch (error: any) {
+        // Handle Timeout specifically (common when agent is downloading models)
+        if (error.cause?.code === 'UND_ERR_HEADERS_TIMEOUT' || error.message.includes('fetch failed')) {
+            console.warn(`[Proxy] Timeout: Agent is busy (likely loading models). Path: ${targetUrl}`);
+            return NextResponse.json(
+                { error: "Agent Loading", details: "Model download in progress" },
+                { status: 503 } // Service Unavailable (Loading)
+            );
+        }
+
         console.error("[Proxy] Error:", error);
         return NextResponse.json(
             { error: "Proxy Failed", details: String(error) },

@@ -49,6 +49,7 @@ AGENT_LANGUAGE=th
 
 # Whisper STT Model Size 
 # Options: tiny, tiny.en, base, small, medium, large-v3
+# WARNING: 'large-v3' is approx 3GB. Initial download will take time but is cached locally.
 STT_MODEL_SIZE=tiny
 ```
 

@@ -9,7 +9,9 @@ client/public/vad.worklet.bundle*.js
 
 # models
 models/*
+hf_cache/*
 !models/.gitkeep
+!hf_cache/.gitkeep
 
 # log
 client/tsc_errors.txt

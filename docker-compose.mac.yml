@@ -47,6 +47,8 @@ services:
       - "8001:8001"
     networks:
       - edge_net
+    volumes:
+      - ./hf_cache:/root/.cache/huggingface
     env_file:
       - ./agent/.env.macos
     depends_on:
