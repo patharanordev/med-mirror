@@ -1,38 +1,55 @@
 # MedMirror: Multimodal Medical AI Mirror
 
-MedMirror is an intelligent, real-time medical analysis platform that transforms your screen into a diagnostic mirror. It combines computer vision (skin segmentation) and multimodal LLMs to provide empathetic, localized dermatological advice.
+MedMirror is an intelligent, real-time medical analysis platform that transforms your screen into a diagnostic mirror. It combines computer vision (skin segmentation), local speech recognition, and multimodal LLMs to provide empathetic, localized dermatological advice.
 
 ---
 
-## 💻 Environment Optimizations
+## 🌟 Key Features
+
+### 🩺 **Real-Time Skin Analysis**
+- **Automatic Detection**: Instantly identifies various skin conditions (redness, lesions, acne) using the integrated SegFormer model.
+- **Live Visualization**: See precise segmentation overlays on your video feed in real-time (0.5 - 1 FPS).
+
+### 🗣️ **Talk to the Mirror (STT)**
+- **Speech-to-Text**: Integrated transcription allowing you to talk directly to the mirror.
+- **Hands-Free**: Talk naturally without pressing buttons. The system auto-detects speech and transcribes it instantly so you can focus on yourself.
+
+### 🧠 **Empathetic Medical Interview**
+- **Context-Aware AI**: The agent "sees" the skin analysis and asks relevant follow-up questions (symptom duration, pain levels, history).
+- **Thai Language Support**: Fluent in Thai for approachable and localized medical advice.
+
+### �️ **Visual Context Assurance**
+- **Multimodal Awareness**: The "Eye" icon 👁️ signals when the AI has captured a clear image of your skin condition.
+- **Zero-Wait Response**: The system initializes in the background, allowing you to start chatting the moment the page loads.
+
+---
+
+## 💻 Environment & Models
 
 MedMirror is designed to run seamlessly on different hardware by choosing the best inference path:
 
 ### 🍎 macOS (Apple Silicon)
-- **Model**: `gemma3n:e2b`
-- **Inference Mode**: **CPU-Only (Dockerized)**
-- **Rationale**: Docker on macOS cannot access the Metal GPU API inside a Linux container. I use the **Gemma 3n (2B optimized)** model because it is lightweight enough to deliver fast, responsive "typing" even when running entirely on the CPU.
+- **Model**: `gemma3n:e2b` (Ollama)
+- **STT**: `faster-whisper` (CPU)
+- **Inference Mode**: **CPU-Optimized (Dockerized)**
 - **Service**: Runs via `docker-compose.mac.yml`.
 
-### 🪟 Windows
-- **Model**: `gemma3:4b`
-- **Inference Mode**: **NVIDIA GPU (RTX 4080)**
-- **Rationale**: Using WSL2 and NVIDIA Container Toolkit, I pass the GPU directly to the Ollama container. This allows the use of the larger **4B parameter** model with massive throughput and sub-second response times.
-- **Service**: Runs via `docker-compose.win.yml`.
+### 🪟 Windows (NVIDIA GPU)
+- **Model**: `gemma3:4b` (Ollama)
+- **STT**: `faster-whisper` (CUDA/GPU)
+- **Inference Mode**: **NVIDIA RTX 4080 Acceleration**
+- **Service**: Runs via `docker-compose.win.yml` with CUDA 12.2 runtime.
 
 ---
 
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-- **Docker Desktop** (Mac/Windows)
+- **Docker Desktop**
 - **NVIDIA Drivers & Container Toolkit** (Windows only)
-- **Ollama** (Optional for Host-Mac mode, internal Docker used by default)
+- **Ollama** (Optional for Host-Mac mode)
 
 ### 2. Pull Gemma Model
-> [!IMPORTANT]
-> You need to pull the Gemma model before starting the application.
-
 #### **macOS**
 ```bash
 ollama pull gemma3n:e2b
@@ -44,43 +61,62 @@ ollama pull gemma3:4b
 ```
 
 ### 3. Launching
-
 #### **macOS**
 ```bash
-./start.sh
+docker-compose -f docker-compose.mac.yml up --build
 ```
 
 #### **Windows**
 ```powershell
-.\start.ps1
+docker-compose -f docker-compose.win.yml up --build
+```
+*(Or use provided `start.bat` / `start.sh` scripts)*
+
+---
+
+## 🛠 Enhanced Architecture
+
+### 1. Frontend (Next.js 15)
+- **Smart Proxy (`/api/proxy`)**: New internal proxy routing handles all CORS and container networking seamlessly.
+- **System Status Hook**: Real-time polling of backend health endpoints (`/health`).
+- **Stream Buffer**: Robust parsing logic handles fragmented SSE packets from the LLM.
+
+### 2. Medical Agent (FastAPI + LangGraph)
+- **Stateful Graph**: Manages conversation history, context, and image inputs.
+- **Hybrid Streaming**: Supports both token-by-token streaming and bulk fallback.
+- **Multimodal Handler**: Automatically formats text + image instructions for the Vision LLM.
+
+### 3. Local STT Service (`faster-whisper`)
+- **Privacy First**: All audio processed locally within the container.
+- **Latency Optimized**: Using `tiny.en` model + beam size 1 for sub-200ms transcription.
+
+### 4. Skin Segmentation (SegFormer)
+- **Real-time Detection**: Uses a Transformers-based SegFormer model to identify skin areas at 0.5 FPS - 1 FPS.
+- **Persistent Cache**: Models are cached to ensure fast restarts and offline capability.
+
+### 5. LLM Backend (Ollama)
+- **Unified API**: All agents communicate via the Ollama OpenAI-compatibility layer (`/v1`).
+- **Flexible Models**: Easily swappable models (Gemma 3, MedGemma) via environment variables.
+
+---
+
+## 🧪 Verification
+Run the automated streaming test to verify backend health:
+```bash
+python agent/tests/test_streaming.py
 ```
 
 ---
 
-## 🛠 Service Architecture
+## � Issues Resolved
 
-### 1. Frontend (Next.js 14)
-- **True Mirror Experience**: Live camera feed is horizontally mirrored for natural interaction.
-- **Voice-First**: Integrated **Silero VAD** for automatic speech detection and real-time Thai/English transcription.
-- **Clean UI**: Minimalist design with no overlays, focusing on the camera feed and AI metrics.
+### Recent Fixes
+- **Resilience**: Fixed "infinite typing" by implementing callback config propagation in LangGraph.
+- **Fix**: Resolved `404 Not Found` proxy errors by aliasing `/health`.
+- **UI**: Added animated status tray (Mic, Ear, Brain, Eye).
+- **Docker**: Split builds for optimized Windows (CUDA) vs Mac (CPU) images.
 
-### 2. Medical Agent (LangGraph + FastAPI)
-- **Hybrid Brain**: Uses a dual-input strategy:
-    - **Quantitative**: Trusts the Segmentation Service for precise surface area measurements.
-    - **Qualitative**: Uses Gemma 3n's vision capabilities to describe patterns, redness, or textures in the image.
-- **Multimodal Flow**: Automatically constructs OpenAI-compatible vision payloads for the LLM.
-
-### 3. Skin Segmentation (SegFormer)
-- **Real-time Detection**: Uses a Transformers-based SegFormer model to identify skin areas at 0.5 FPS - 1 FPS.
-- **Persistent Cache**: Models are cached in `~/.ollama` or `./models` to ensure fast restarts and offline capability.
-
-### 4. LLM Backend (Ollama)
-- **Unified API**: All agents communicate via the Ollama OpenAI-compatibility layer (`/v1`).
-- **Flexible Models**: Easily swappable models (PaliGemma, Gemma 3n, MedGemma) via environment variables.
-
----
-
-## 📝 Changelog
+### Previous Improvements
 - **Mirror Fix**: Both live preview and captured frames are now horizontally flipped to match user intuition.
 - **VAD Stability**: Fixed `InvalidStateError` race conditions in browser SpeechRecognition for smoother Thai voice input.
 - **Gemma 3 Migration**: Switched to the Gemma 3 family for superior medical text comprehension and multimodal reasoning.
