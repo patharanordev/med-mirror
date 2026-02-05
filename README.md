@@ -1,5 +1,7 @@
 # MedMirror: Multimodal Medical AI Mirror
 
+![idea](./assets/idea.png)
+
 MedMirror is an intelligent, real-time medical analysis platform that transforms your screen into a diagnostic mirror. It combines computer vision (skin segmentation), local speech recognition, and multimodal LLMs to provide empathetic, localized dermatological advice.
 
 ---
