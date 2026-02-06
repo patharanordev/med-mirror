@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'providers/app_state.dart';
-import 'screens/config_screen.dart';
-import 'screens/main_screen.dart';
+import 'core/state/app_state.dart';
+import 'features/settings/screens/config_screen.dart';
+import 'features/dashboard/screens/dashboard_screen.dart';
 
 void main() {
   runApp(
@@ -58,6 +58,12 @@ class _StartUpLogicState extends State<StartUpLogic> {
     // For now, we rely on AppState to decide or default to ConfigScreen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppState>().loadConfig();
+      // Safety timeout
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && !context.read<AppState>().isConfigLoaded) {
+           context.read<AppState>().forceReady();
+        }
+      });
     });
   }
 

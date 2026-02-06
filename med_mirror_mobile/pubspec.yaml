@@ -18,13 +18,14 @@ dependencies:
   
   # UI/UX
   flutter_animate: ^4.5.0
-  google_fonts: ^6.1.0
+  google_fonts: 6.1.0
   lucide_icons: ^0.257.0 # Matching the web's icons
   glassmorphism: ^3.0.0 # Helper for glass effect
   
   # Utilities
   permission_handler: ^11.3.0
   image: ^4.1.3 # Image processing
+  vad: ^0.0.7+1
 
 dev_dependencies:
   flutter_test:

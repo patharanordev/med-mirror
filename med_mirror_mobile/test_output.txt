@@ -1,0 +1,4 @@
+﻿00:00 +0: loading C:/Users/patha/projects/med-mirror/med_mirror_mobile/test/services/api_service_test.dart
+00:00 +0 -1: loading C:/Users/patha/projects/med-mirror/med_mirror_mobile/test/services/api_service_test.dart [E]
+  Failed to load "C:/Users/patha/projects/med-mirror/med_mirror_mobile/test/services/api_service_test.dart": Compilation failed for testPath=C:/Users/patha/projects/med-mirror/med_mirror_mobile/test/services/api_service_test.dart
+00:00 +0 -1: Some tests failed.

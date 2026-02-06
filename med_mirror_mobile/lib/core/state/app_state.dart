@@ -20,6 +20,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void forceReady() {
+    _isConfigLoaded = true;
+    notifyListeners();
+  }
+
   Future<void> setHostIp(String ip) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('host_ip', ip);

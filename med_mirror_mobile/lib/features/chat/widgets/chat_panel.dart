@@ -7,8 +7,9 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/message.dart';
-import '../providers/app_state.dart';
-import '../services/api_service.dart';
+import '../../../core/state/app_state.dart';
+import '../../../core/services/api_service.dart';
+import '../controllers/voice_controller.dart';
 
 class ChatPanel extends StatefulWidget {
   final String? currentContext; // Skin analysis context
@@ -20,23 +21,46 @@ class ChatPanel extends StatefulWidget {
 
 class _ChatPanelState extends State<ChatPanel> {
   final List<Message> _messages = [
-    Message(role: 'assistant', content: 'Hello. I am MedMirror Agent.\\nStart by analyzing your skin.'),
+    Message(role: 'assistant', content: 'Hello. I am MedMirror Agent.\nStart by analyzing your skin.'),
   ];
   final TextEditingController _inputCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
-  bool _isTyping = false;
   
-  // Voice State
-  final AudioRecorder _audioRecorder = AudioRecorder();
-  bool _isListening = false;
-  bool _isUserSpeaking = false; 
-  Timer? _amplitudeTimer;
-  DateTime? _lastSpeechTime;
+  bool _isTyping = false;
+  late VoiceController _voiceController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize Voice Controller
+    final appState = context.read<AppState>();
+    final api = ApiService(segmentationBaseUrl: appState.segmentationUrl, agentBaseUrl: appState.agentUrl);
+    _voiceController = VoiceController(api);
+    _voiceController.addListener(_onVoiceStateChange);
+
+    // Auto-Start VAD on access
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Small delay to ensure permissions/UI are ready
+      // Note: Browsers might block audio start without user interaction.
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+           _voiceController.setAutoMode(true);
+           _voiceController.startRecording(
+             onTextRecognized: (text) => _sendMessage(manualText: text)
+           );
+        }
+      });
+    });
+  }
+
+  void _onVoiceStateChange() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
-    _audioRecorder.dispose();
-    _amplitudeTimer?.cancel();
+    _voiceController.removeListener(_onVoiceStateChange);
+    _voiceController.dispose();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -84,84 +108,17 @@ class _ChatPanelState extends State<ChatPanel> {
         });
       }
     } finally {
-      if (mounted) setState(() => _isTyping = false);
-    }
-  }
-
-  // --- Voice Logic ---
-  Future<void> _toggleRecording() async {
-    if (_isListening) {
-      await _stopRecording();
-    } else {
-      await _startRecording();
-    }
-  }
-
-  Future<void> _startRecording() async {
-    if (await Permission.microphone.request().isGranted) {
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/temp_voice.m4a'; // m4a is standard for iOS
-      
-      await _audioRecorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc), 
-        path: path
-      );
-      
-      setState(() => _isListening = true);
-      _startAmplitudeCheck();
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    _amplitudeTimer?.cancel();
-    final path = await _audioRecorder.stop();
-    setState(() {
-      _isListening = false;
-      _isUserSpeaking = false;
-    });
-
-    if (path != null) {
-      // Transcribe
-      final appState = context.read<AppState>();
-      final api = ApiService(segmentationBaseUrl: appState.segmentationUrl, agentBaseUrl: appState.agentUrl);
-      
-      // Note: Backend expects wav typically, but Whisper handles m4a/mp3 usually.
-      // If backend STRICTLY needs wav, we might need ffmpeg or pcm recording.
-      // Assuming backend uses OpenAI Whisper API or FasterWhisper which supports many formats.
-      // BUT: The client/src/hooks/useVAD.ts sends 'audio/wav'.
-      // If default backend (FastAPI) handles generic uploads, m4a should work.
-      
-      final text = await api.transcribeAudio(path);
-      if (text != null && text.isNotEmpty) {
-        _sendMessage(manualText: text);
+      if (mounted) {
+        setState(() => _isTyping = false);
+        // Automatic VAD: Restart listening if in Auto Mode
+        if (_voiceController.isAutoMode) {
+           _voiceController.startRecording(
+             onTextRecognized: (text) => _sendMessage(manualText: text)
+           );
+        }
       }
     }
   }
-
-  void _startAmplitudeCheck() {
-    _amplitudeTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) async {
-       final amp = await _audioRecorder.getAmplitude();
-       final currentVol = amp.current; // dB
-       
-       // Threshold logic (simple)
-       if (currentVol > -30) { // Speaking
-          setState(() => _isUserSpeaking = true);
-          _lastSpeechTime = DateTime.now();
-       } else {
-          // Silence
-          // If silence > 1.5s AND we were speaking before inside this session -> Stop
-          if (_isUserSpeaking && _lastSpeechTime != null) {
-             final silenceDuration = DateTime.now().difference(_lastSpeechTime!);
-             if (silenceDuration.inMilliseconds > 1500) {
-                // Formatting: Stop
-                timer.cancel(); // Prevent multiple triggers
-                _stopRecording();
-             }
-          }
-       }
-    });
-  }
-
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -178,33 +135,25 @@ class _ChatPanelState extends State<ChatPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 400, // Fixed width for iPad sidebar
+      // Width/Height controlled by parent Positioned
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        border: const Border(left: BorderSide(color: Colors.white12)),
+        color: Colors.transparent, // Fully transparent as requested ("back ground transparent")
+        // Or if they wanted a very subtle gradient, we could add it, but "transparent" usually means see-through.
+        // Let's add a gradient to ensure text readability without blocking view.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+        ),
       ),
       child: Column(
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-               border: Border(bottom: BorderSide(color: Colors.white10))
-            ),
-            child: Row(
-              children: [
-                 const CircleAvatar(backgroundColor: Colors.blueAccent, child: Text("AI")),
-                 const SizedBox(width: 12),
-                 const Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                     Text("MedMirror Assistant", style: TextStyle(fontWeight: FontWeight.bold)),
-                     Text("Online • Gemma", style: TextStyle(fontSize: 12, color: Colors.white54)),
-                   ],
-                 ),
-              ],
-            ),
-          ),
+          // Removed redundant Header since we have a top bar now, 
+          // OR we keep a minimal "AI Assistant" label?
+          // User said "white text over on the top of the screen", which we did in Dashboard.
+          // Let's keep a small indicator here for the chat agent status.
+          
+          // Chat List
           
           // Chat List
           Expanded(
@@ -238,20 +187,8 @@ class _ChatPanelState extends State<ChatPanel> {
             ),
           ),
           
-          // Transcription indicator
-          if (_isListening)
-             Container(
-               padding: const EdgeInsets.all(8),
-               color: Colors.red.withOpacity(0.1),
-               child: Row(
-                 mainAxisAlignment: MainAxisAlignment.center,
-                 children: [
-                    const Icon(Icons.mic, color: Colors.redAccent, size: 16),
-                    const SizedBox(width: 8),
-                    Text(_isUserSpeaking ? "Listening..." : "Waiting...", style: const TextStyle(color: Colors.redAccent)),
-                 ],
-               ),
-             ),
+          // Transcription indicator removed for smoother UI
+          // Status is indicated by the Mic button color.
 
           // Input
           Container(
@@ -278,14 +215,16 @@ class _ChatPanelState extends State<ChatPanel> {
                 const SizedBox(width: 8),
                 // Mic Button
                 GestureDetector(
-                  onTap: _toggleRecording,
+                  onTap: () => _voiceController.toggleRecording(
+                    onTextRecognized: (text) => _sendMessage(manualText: text)
+                  ),
                   child: Container(
                     width: 48, height: 48,
                     decoration: BoxDecoration(
-                      color: _isListening ? Colors.redAccent : Colors.white10,
+                      color: _voiceController.isListening ? Colors.redAccent : Colors.white10,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(_isListening ? Icons.stop : Icons.mic, color: Colors.white),
+                    child: Icon(_voiceController.isListening ? Icons.stop : Icons.mic, color: Colors.white),
                   ),
                 ),
                 const SizedBox(width: 8),

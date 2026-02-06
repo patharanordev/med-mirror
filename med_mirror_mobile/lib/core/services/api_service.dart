@@ -2,13 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img; // For lightweight processing if needed
-import '../models/message.dart';
+import '../../features/chat/models/message.dart';
 
 class ApiService {
   final String segmentationBaseUrl;
   final String agentBaseUrl;
+  final http.Client? _client;
 
-  ApiService({required this.segmentationBaseUrl, required this.agentBaseUrl});
+  ApiService({required this.segmentationBaseUrl, required this.agentBaseUrl, http.Client? client})
+      : _client = client;
 
   // --- 1. Segmentation ---
   Future<Map<String, dynamic>> segmentImage(List<int> imageBytes) async {
@@ -34,7 +36,10 @@ class ApiService {
 
   // --- 2. Chat Agent ---
   // Returns a Stream of text chunks (simulating the streaming response)
+  // --- 2. Chat Agent ---
+  // Returns a Stream of text chunks (simulating the streaming response)
   Stream<String> sendChat(String text, List<Message> history, {String? context, String? imageUrl}) async* {
+    final client = _client ?? http.Client();
     try {
       final payload = {
         'message': text,
@@ -43,13 +48,6 @@ class ApiService {
         'image_url': imageUrl,
       };
 
-      final client = http.Client();
-      final request = http.Request('POST', Uri.parse('$agentBaseUrl/api/proxy/chat')); // Using proxy path or direct agent? 
-      // NOTE: The web client uses /api/proxy which forwards to agent:8001. 
-      // If we talk directly to agent:8001, the path is likely /chat or similar.
-      // Checking web client: fetch(`${API_AGENT}/chat`) -> proxy -> http://med_mirror_agent:8001/chat
-      // So path is likely /chat
-      
       // We will assume we talk directly to Agent Service on port 8001
       final directUri = Uri.parse('$agentBaseUrl/chat'); 
       
@@ -63,33 +61,43 @@ class ApiService {
         throw Exception('Chat API Error: ${response.statusCode}');
       }
 
-      // Stream handling
+      // Stream handling with buffering
       final stream = response.stream.transform(utf8.decoder);
+      String buffer = '';
       
-      // Simple SSE parser logic
       await for (final chunk in stream) {
-        // This is a naive parser for the SSE format "data: {...}"
-        // In a real app, use a robust SSE client. 
-        // For this demo, we'll yield raw text chunks if they contain content.
+        buffer += chunk;
         
-        final lines = chunk.split('\n\n');
-        for (final line in lines) {
-           if (line.trim().startsWith("data: ")) {
-             final dataStr = line.replaceAll("data: ", "").trim();
-             if (dataStr == "[DONE]") break;
+        // Split by simple newline to handle various SSE formats (e.g. data: ...\n)
+        // We keep the last part in buffer if it doesn't end with a newline
+        while (buffer.contains('\n')) {
+          final splitIndex = buffer.indexOf('\n');
+          final line = buffer.substring(0, splitIndex).trim();
+          buffer = buffer.substring(splitIndex + 1);
+          
+          if (line.startsWith("data: ")) {
+             final dataStr = line.substring(6).trim(); // Remove "data: "
+             if (dataStr == "[DONE]") return; // End of stream
+             
+             if (dataStr.isEmpty) continue;
+
              try {
                final json = jsonDecode(dataStr);
                if (json['content'] != null) {
                  yield json['content'];
                }
-             } catch (_) {}
-           }
+             } catch (_) {
+               // Ignore parsing errors for non-json data or keep accumulating if needed
+               // But usually SSE data lines are complete JSONs
+             }
+          }
         }
       }
-      client.close();
     } catch (e) {
       print('Chat Error: $e');
       rethrow;
+    } finally {
+      client.close();
     }
   }
 
@@ -97,7 +105,26 @@ class ApiService {
   Future<String?> transcribeAudio(String filePath) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$agentBaseUrl/stt')); // Direct agent STT
-      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      
+      // Web Support: If path starts with 'blob:', fetch it first
+      if (filePath.startsWith('blob:')) {
+         final blobResponse = await http.get(Uri.parse(filePath));
+         if (blobResponse.statusCode == 200) {
+           request.files.add(
+              http.MultipartFile.fromBytes(
+                'file', 
+                blobResponse.bodyBytes, 
+                filename: 'voice.m4a' // or .wav or .webm depending on encoder
+              )
+           );
+         } else {
+            print("Failed to fetch blob: ${blobResponse.statusCode}");
+            return null;
+         }
+      } else {
+         // Mobile/Desktop: Use file path
+         request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      }
 
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
@@ -108,6 +135,30 @@ class ApiService {
       }
     } catch (e) {
       print('STT Error: $e');
+    }
+    return null;
+  }
+
+  Future<String?> transcribeAudioBytes(List<int> audioBytes) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$agentBaseUrl/stt'));
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file', 
+          audioBytes, 
+          filename: 'voice.wav'
+        )
+      );
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['text'];
+      }
+    } catch (e) {
+      print('STT Bytes Error: $e');
     }
     return null;
   }

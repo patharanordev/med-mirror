@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/app_state.dart';
-import '../services/api_service.dart';
+import '../../../core/state/app_state.dart';
+import '../../../core/services/api_service.dart';
 
 class CameraOverlayView extends StatefulWidget {
   final Function(String, double) onAnalysisUpdate; // Context, Skin%
@@ -33,23 +33,34 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
   }
 
   Future<void> _initCamera() async {
-    final cameras = await availableCameras();
-    // Prefer front camera for "Mirror" experience
-    final frontCamera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        print("No cameras available");
+        if (mounted) setState(() => _isCameraInitialized = false);
+        return;
+      }
 
-    _controller = CameraController(
-      frontCamera,
-      ResolutionPreset.high,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
+      // Prefer front camera for "Mirror" experience
+      final frontCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
 
-    await _controller!.initialize();
-    if (mounted) {
-      setState(() => _isCameraInitialized = true);
+      _controller = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+
+      await _controller!.initialize();
+      if (mounted) {
+        setState(() => _isCameraInitialized = true);
+      }
+    } catch (e) {
+      print("Camera initialization failed: $e");
+      if (mounted) setState(() => _isCameraInitialized = false); // Remain uninit
     }
   }
 
@@ -122,7 +133,20 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
   @override
   Widget build(BuildContext context) {
     if (!_isCameraInitialized || _controller == null) {
-      return const Center(child: CircularProgressIndicator());
+      // If initialization failed or is in progress
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+               Icon(Icons.videocam_off, color: Colors.white54, size: 48),
+               SizedBox(height: 16),
+               Text("Camera Unavailable", style: TextStyle(color: Colors.white54)),
+            ],
+          ),
+        ),
+      );
     }
 
     return Stack(

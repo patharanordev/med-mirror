@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../providers/app_state.dart';
-import 'main_screen.dart';
+import '../../../core/state/app_state.dart';
+import '../../dashboard/screens/dashboard_screen.dart';
 
 class ConfigScreen extends StatefulWidget {
   const ConfigScreen({super.key});
