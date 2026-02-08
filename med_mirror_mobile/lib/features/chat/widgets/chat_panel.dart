@@ -6,17 +6,16 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../models/message.dart';
 import '../../../core/state/app_state.dart';
 import '../../../core/services/api_service.dart';
-import '../controllers/voice_controller.dart';
 
 class ChatPanel extends StatefulWidget {
   final String? currentContext; // Skin analysis context
   const ChatPanel({super.key, this.currentContext});
 
   @override
-  State<ChatPanel> createState() => _ChatPanelState();
+  State<ChatPanel> createState() => ChatPanelState();
 }
 
-class _ChatPanelState extends State<ChatPanel> {
+class ChatPanelState extends State<ChatPanel> {
   final List<Message> _messages = [
     Message(
         role: 'assistant',
@@ -30,19 +29,15 @@ class _ChatPanelState extends State<ChatPanel> {
   @override
   void initState() {
     super.initState();
+    // Callback registration moved to MainScreen to avoid stale references
+  }
 
-    // Register Voice Callback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      print("ChatPanel: Registering VoiceController callback");
-      context.read<VoiceController>().setTextCallback((text) {
-        print("ChatPanel: Callback received text '$text'. Mounted: $mounted");
-        if (mounted) {
-          _sendMessage(manualText: text);
-        } else {
-          print("ChatPanel: Skipped message because not mounted");
-        }
-      });
-    });
+  /// Public method for MainScreen to send messages via GlobalKey
+  void sendVoiceMessage(String text) {
+    print("ChatPanel: sendVoiceMessage called with '$text'. Mounted: $mounted");
+    if (mounted && text.isNotEmpty) {
+      _sendMessage(manualText: text);
+    }
   }
 
   @override
