@@ -7,10 +7,30 @@ import 'package:provider/provider.dart';
 import '../../../core/state/app_state.dart';
 import '../../../core/services/api_service.dart';
 
+// Controller to trigger camera actions from outside
+class CameraOverlayController {
+  VoidCallback? _onCaptureTriggered;
+
+  void triggerCapture() {
+    _onCaptureTriggered?.call();
+  }
+
+  void dispose() {
+    _onCaptureTriggered = null;
+  }
+}
+
 class CameraOverlayView extends StatefulWidget {
   final Function(String, double) onAnalysisUpdate; // Context, Skin%
+  final CameraOverlayController? controller;
+  final Function(bool)? onCameraStatusChanged;
 
-  const CameraOverlayView({super.key, required this.onAnalysisUpdate});
+  const CameraOverlayView({
+    super.key, 
+    required this.onAnalysisUpdate,
+    this.controller,
+    this.onCameraStatusChanged,
+  });
 
   @override
   State<CameraOverlayView> createState() => _CameraOverlayViewState();
@@ -30,6 +50,11 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
   void initState() {
     super.initState();
     _initCamera();
+    
+    // Bind controller
+    widget.controller?._onCaptureTriggered = () {
+      _captureAndAnalyze();
+    };
   }
 
   Future<void> _initCamera() async {
@@ -37,7 +62,10 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
         print("No cameras available");
-        if (mounted) setState(() => _isCameraInitialized = false);
+        if (mounted) {
+           setState(() => _isCameraInitialized = false);
+           widget.onCameraStatusChanged?.call(false);
+        }
         return;
       }
 
@@ -57,10 +85,14 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
       await _controller!.initialize();
       if (mounted) {
         setState(() => _isCameraInitialized = true);
+        widget.onCameraStatusChanged?.call(true);
       }
     } catch (e) {
       print("Camera initialization failed: $e");
-      if (mounted) setState(() => _isCameraInitialized = false); // Remain uninit
+      if (mounted) {
+         setState(() => _isCameraInitialized = false); // Remain uninit
+         widget.onCameraStatusChanged?.call(false);
+      }
     }
   }
 
@@ -125,6 +157,7 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
 
   @override
   void dispose() {
+    widget.controller?.dispose();
     _controller?.dispose();
     _timer?.cancel();
     super.dispose();
@@ -132,28 +165,13 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isCameraInitialized || _controller == null) {
-      // If initialization failed or is in progress
-      return Container(
-        color: Colors.black,
-        child: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-               Icon(Icons.videocam_off, color: Colors.white54, size: 48),
-               SizedBox(height: 16),
-               Text("Camera Unavailable", style: TextStyle(color: Colors.white54)),
-            ],
-          ),
-        ),
-      );
-    }
-
+    // No explicit "Unavailable" UI needed in center as requested.
+    // Just a black container that will hold the overlay.
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 1. Camera Feed
-        CameraPreview(_controller!),
+        // 1. Background (Black, no CameraPreview)
+        Container(color: Colors.black),
         
         // 2. Segmentation Overlay
         if (_segmentationOverlay != null)
@@ -187,12 +205,6 @@ class _CameraOverlayViewState extends State<CameraOverlayView> {
                 Switch(value: _isAutoMode, onChanged: _toggleAuto),
                 const SizedBox(width: 8),
                 const Text("Auto Segment", style: TextStyle(color: Colors.white)),
-                const SizedBox(width: 16),
-                IconButton(
-                  icon: const Icon(Icons.camera, color: Colors.white),
-                  onPressed: _captureAndAnalyze,
-                  tooltip: "Manual Analyze",
-                ),
               ],
             ),
           ),

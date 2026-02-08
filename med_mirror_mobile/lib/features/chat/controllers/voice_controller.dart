@@ -8,9 +8,9 @@ import '../../../core/services/api_service.dart';
 import '../../../core/utils/audio_utils.dart'; // Ensure this matches where you put AudioUtils
 
 class VoiceController extends ChangeNotifier {
-  final ApiService _apiService;
-  late final VadHandler _vadHandler;
-  
+  ApiService _apiService;
+  late VadHandler _vadHandler;
+
   bool _isListening = false;
   bool _isUserSpeaking = false;
   bool _isProcessing = false;
@@ -21,106 +21,155 @@ class VoiceController extends ChangeNotifier {
   bool get isProcessing => _isProcessing;
   bool get isAutoMode => _isAutoMode;
 
-  VoiceController(this._apiService) {
-    _initVad();
+  VoiceController(this._apiService, {VadHandler? vadHandler}) {
+    _initVad(vadHandler);
   }
 
-  void _initVad() {
-    _vadHandler = VadHandler.create(isDebug: false);
+  // Allow updating the API Service without disposing the controller
+  void updateApiService(ApiService newService) {
+    _apiService = newService;
+  }
+
+  void _initVad(VadHandler? handler) {
+    _vadHandler = handler ?? VadHandler.create(isDebug: true);
 
     _vadHandler.onSpeechStart.listen((_) {
       print("VAD: Speech Start");
       _isUserSpeaking = true;
-      notifyListeners();
+      notifyListenersSafe();
     });
 
     _vadHandler.onSpeechEnd.listen((List<double> samples) async {
-       print("VAD: Speech End (Samples: ${samples.length})");
-       _isUserSpeaking = false;
-       notifyListeners();
+      if (_isDisposed) return;
+      print("VAD: Speech End (Samples: ${samples.length})");
+      _isUserSpeaking = false;
+      _isProcessing = true;
+      notifyListenersSafe();
 
-       // Stop listening to prevent overlapping inputs
-       await _vadHandler.stopListening();
-       _isListening = false;
-       _isProcessing = true;
-       notifyListeners();
+      // NOTE: We do NOT stop listening immediately here.
+      // Attempting to stop/dispose synchronously causing "Bad state" race conditions
+      // in the VAD library's internal loop.
 
-       try {
-         // Convert to WAV
-         final wavBytes = AudioUtils.createWavFile(samples, 16000);
-         
-         // Upload
-         final text = await _apiService.transcribeAudioBytes(wavBytes);
-         if (text != null && text.isNotEmpty) {
-            _onTextRecognizedCallback?.call(text);
-         }
-       } catch (e) {
-         print("VAD Processing Error: $e");
-       } finally {
-         _isProcessing = false;
-         notifyListeners();
-       }
+      try {
+        // Convert to WAV
+        final wavBytes = AudioUtils.createWavFile(samples, 16000);
+        print("VAD: WAV created (${wavBytes.length} bytes)");
+
+        // Upload
+        print("VAD: Sending to API...");
+        final text = await _apiService.transcribeAudioBytes(wavBytes);
+        print("VAD: API Response: '$text'");
+
+        if (text != null && text.isNotEmpty && !_isDisposed) {
+          print("VAD: Invoking Callback");
+          _onTextRecognizedCallback?.call(text);
+        } else {
+          print("VAD: No text recognized or controller disposed");
+        }
+      } catch (e) {
+        print("VAD Processing Error: $e");
+      } catch (e) {
+        print("VAD Processing Error: $e");
+      } finally {
+        _isProcessing = false;
+        notifyListenersSafe();
+      }
     });
 
     _vadHandler.onError.listen((msg) {
       print("VAD Error: $msg");
       _isListening = false;
-      notifyListeners();
+      notifyListenersSafe();
     });
   }
 
   // Callback storage for the current session
   Function(String)? _onTextRecognizedCallback;
 
+  void setTextCallback(Function(String) callback) {
+    _onTextRecognizedCallback = callback;
+  }
+
+  bool _isDisposed = false;
+
   @override
   void dispose() {
-    _vadHandler.dispose();
+    _isDisposed = true;
+    try {
+      // Best effort to stop internal loops before disposing streams
+      _vadHandler.stopListening();
+    } catch (_) {}
+
+    try {
+      _vadHandler.dispose();
+    } catch (e) {
+      print("Error disposing VAD handler: $e");
+    }
     super.dispose();
   }
 
   void setAutoMode(bool enabled) {
     _isAutoMode = enabled;
-    notifyListeners();
+    if (enabled && !_isListening && !_isProcessing) {
+      startRecording();
+    }
+    notifyListenersSafe();
   }
 
-  Future<void> toggleRecording({required Function(String) onTextRecognized}) async {
+  Future<void> toggleRecording() async {
     if (_isListening) {
       // Manual Stop
       _isAutoMode = false;
-      await stopRecording(onTextRecognized: onTextRecognized);
+      await stopRecording();
     } else {
       // Manual Start
       _isAutoMode = true;
-      await startRecording(onTextRecognized: onTextRecognized);
+      await startRecording();
     }
   }
 
-  Future<void> startRecording({required Function(String) onTextRecognized}) async {
-    if (await Permission.microphone.request().isGranted) {
-      _onTextRecognizedCallback = onTextRecognized;
-      try {
-        await _vadHandler.startListening();
-        _isListening = true;
-        notifyListeners();
-        print("VAD: Started Listening");
-      } catch (e) {
-        print("Error starting VAD: $e");
-        _isListening = false;
-        notifyListeners();
+  bool _isInitializing = false;
+
+  Future<void> startRecording() async {
+    if (_isDisposed || _isListening || _isInitializing) return;
+
+    _isInitializing = true;
+    notifyListenersSafe();
+
+    try {
+      if (await Permission.microphone.request().isGranted) {
+        try {
+          await _vadHandler.startListening();
+          _isListening = true;
+          print("VAD: Started Listening");
+        } catch (e) {
+          print("Error starting VAD: $e");
+          _isListening = false;
+        }
       }
+    } finally {
+      _isInitializing = false;
+      notifyListenersSafe();
     }
   }
 
-  Future<void> stopRecording({required Function(String) onTextRecognized}) async {
+  Future<void> stopRecording() async {
     if (!_isListening) return;
     try {
       await _vadHandler.stopListening();
       _isListening = false;
       _isUserSpeaking = false;
-      notifyListeners();
       print("VAD: Stopped Listening");
     } catch (e) {
-       print("Error stopping VAD: $e");
+      print("Error stopping VAD: $e");
+    } finally {
+      notifyListenersSafe();
+    }
+  }
+
+  void notifyListenersSafe() {
+    if (!_isDisposed) {
+      notifyListeners();
     }
   }
 }

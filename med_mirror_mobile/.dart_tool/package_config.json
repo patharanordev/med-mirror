@@ -153,9 +153,9 @@
     },
     {
       "name": "google_fonts",
-      "rootUri": "file:///C:/Users/patha/AppData/Local/Pub/Cache/hosted/pub.dev/google_fonts-6.1.0",
+      "rootUri": "file:///C:/Users/patha/AppData/Local/Pub/Cache/hosted/pub.dev/google_fonts-8.0.1",
       "packageUri": "lib/",
-      "languageVersion": "2.14"
+      "languageVersion": "3.9"
     },
     {
       "name": "http",
@@ -222,6 +222,12 @@
       "rootUri": "file:///C:/Users/patha/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.17.0",
       "packageUri": "lib/",
       "languageVersion": "3.5"
+    },
+    {
+      "name": "mocktail",
+      "rootUri": "file:///C:/Users/patha/AppData/Local/Pub/Cache/hosted/pub.dev/mocktail-1.0.4",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
     },
     {
       "name": "nested",

@@ -18,7 +18,7 @@ dependencies:
   
   # UI/UX
   flutter_animate: ^4.5.0
-  google_fonts: 6.1.0
+  google_fonts: ^8.0.1
   lucide_icons: ^0.257.0 # Matching the web's icons
   glassmorphism: ^3.0.0 # Helper for glass effect
   
@@ -31,8 +31,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  mocktail: ^1.0.4
+  plugin_platform_interface: ^2.1.8
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/images/
+#   assets:
+#     - assets/images/

@@ -1,19 +1,66 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'core/state/app_state.dart';
+import 'core/services/api_service.dart';
 import 'features/settings/screens/config_screen.dart';
 import 'features/dashboard/screens/dashboard_screen.dart';
+import 'features/chat/controllers/voice_controller.dart';
 
 void main() {
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AppState()),
-      ],
-      child: const MedMirrorApp(),
-    ),
-  );
+  runZonedGuarded(() {
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppState()),
+          // Global VoiceController that survives screen rebuilds
+          ChangeNotifierProxyProvider<AppState, VoiceController>(
+            create: (context) {
+              final app = context.read<AppState>();
+              final api = ApiService(
+                  segmentationBaseUrl: app.segmentationUrl,
+                  agentBaseUrl: app.agentUrl);
+              return VoiceController(api);
+            },
+            update: (context, app, previous) {
+              final api = ApiService(
+                  segmentationBaseUrl: app.segmentationUrl,
+                  agentBaseUrl: app.agentUrl);
+              if (previous == null) return VoiceController(api);
+
+              previous.updateApiService(api);
+              return previous;
+            },
+          ),
+          // Make ApiService available to widgets like ChatPanel
+          ProxyProvider<AppState, ApiService>(
+            update: (context, app, previous) => ApiService(
+                segmentationBaseUrl: app.segmentationUrl,
+                agentBaseUrl: app.agentUrl),
+          ),
+        ],
+        child: const MedMirrorApp(),
+      ),
+    );
+  }, (error, stack) {
+    final errorStr = error.toString();
+    // Suppress expected VAD library race-condition errors on Web
+    if (errorStr.contains("Bad state") ||
+        errorStr.contains("VadIteratorImpl")) {
+      return;
+    }
+    print("Uncaught Error (Zone): $error");
+  }, zoneSpecification: ZoneSpecification(
+    print: (self, parent, zone, line) {
+      // Intercept and suppress benign VAD library logs
+      if (line.contains("VadIteratorImpl") ||
+          (line.contains("Bad state") && line.contains("VAD"))) {
+        return;
+      }
+      parent.print(zone, line);
+    },
+  ));
 }
 
 class MedMirrorApp extends StatelessWidget {
@@ -22,13 +69,15 @@ class MedMirrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MedMirror Edge',
+      title: 'MedMirror',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
         textTheme: GoogleFonts.interTextTheme(
-          Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+          Theme.of(context)
+              .textTheme
+              .apply(bodyColor: Colors.white, displayColor: Colors.white),
         ),
         colorScheme: const ColorScheme.dark(
           primary: Colors.white,
@@ -61,7 +110,7 @@ class _StartUpLogicState extends State<StartUpLogic> {
       // Safety timeout
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted && !context.read<AppState>().isConfigLoaded) {
-           context.read<AppState>().forceReady();
+          context.read<AppState>().forceReady();
         }
       });
     });
@@ -70,7 +119,7 @@ class _StartUpLogicState extends State<StartUpLogic> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    
+
     if (!state.isConfigLoaded) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

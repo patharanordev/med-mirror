@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../chat/controllers/voice_controller.dart';
+import '../../../core/state/app_state.dart';
+import '../../../core/services/api_service.dart';
 import '../widgets/camera_overlay_view.dart';
+import '../widgets/badge.dart';
 import '../../chat/widgets/chat_panel.dart';
+import '../../chat/widgets/audio_wave.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -12,6 +19,26 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   String _currentContext = "";
   double _skinVal = 0;
+  bool _isCameraReady = false; // Initial state false until detected
+  final CameraOverlayController _cameraController = CameraOverlayController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Start VAD automatically (using global controller)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final voiceController = context.read<VoiceController>();
+      voiceController.setAutoMode(true);
+      voiceController.startRecording();
+    });
+  }
+
+  @override
+  void dispose() {
+    _cameraController.dispose();
+    // VoiceController is global, do not dispose here
+    super.dispose();
+  }
 
   void _updateAnalysis(String ctx, double val) {
     // Only update if changed significantly to avoid rebuilds
@@ -36,40 +63,93 @@ class _MainScreenState extends State<MainScreen> {
           // 1. Background Camera
           CameraOverlayView(
             onAnalysisUpdate: _updateAnalysis,
+            controller: _cameraController,
+            onCameraStatusChanged: (bool isReady) {
+              // Update UI based on camera availability
+              if (mounted && _isCameraReady != isReady) {
+                setState(() {
+                  _isCameraReady = isReady;
+                });
+              }
+            },
           ),
-          
+
           // 2. Top Header (White text over screen)
           Positioned(
-            top: 40, 
-            left: 20, 
-            right: 20,
+            top: 30,
+            left: 30,
+            right: 30,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  "MedMirror EDGE", 
-                  style: TextStyle(
-                    color: Colors.white, 
-                    fontSize: 24, 
-                    fontWeight: FontWeight.bold,
-                    shadows: [Shadow(blurRadius: 4, color: Colors.black, offset: Offset(0, 2))],
-                  )
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      "MedMirror",
+                      style: GoogleFonts.michroma(
+                        color: Colors.white,
+                        fontSize: 48,
+                        fontWeight: FontWeight.w400, // Regular
+                        height: 0.75,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const AppBadge(text: "EDGE"),
+                  ],
                 ),
-                // Status Icons or other header info could go here
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.circle, size: 10, color: Colors.greenAccent),
-                      SizedBox(width: 8),
-                      Text("System Ready", style: TextStyle(color: Colors.white, fontSize: 12)),
-                    ],
-                  ),
+
+                // Right Side Controls: Camera + Mic
+                Row(
+                  children: [
+                    // Camera Button (Moved to top right)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                            _isCameraReady
+                                ? Icons.camera_alt
+                                : Icons.no_photography,
+                            color:
+                                _isCameraReady ? Colors.white : Colors.white38),
+                        onPressed: _isCameraReady
+                            ? () {
+                                // Trigger camera capture in overlay
+                                _cameraController.triggerCapture();
+                              }
+                            : null, // Disable if not ready
+                        tooltip: _isCameraReady
+                            ? "Analyze Interface"
+                            : "Camera Unavailable",
+                      ),
+                    ),
+
+                    const SizedBox(width: 16),
+
+                    // Mic Status Indicator (Icon Only)
+                    Consumer<VoiceController>(builder: (context, vc, _) {
+                      return Container(
+                        padding: const EdgeInsets.all(10), // Circle-ish padding
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: vc.isListening
+                                  ? Colors.greenAccent
+                                  : Colors.white24,
+                              width: 2),
+                        ),
+                        child: Icon(vc.isListening ? Icons.mic : Icons.mic_off,
+                            size: 20,
+                            color: vc.isListening
+                                ? Colors.greenAccent
+                                : Colors.white54),
+                      );
+                    }),
+                  ],
                 ),
               ],
             ),
@@ -80,10 +160,28 @@ class _MainScreenState extends State<MainScreen> {
             right: 20,
             bottom: 20,
             width: 400, // Fixed width
-            height: MediaQuery.of(context).size.height * 0.5, // Half screen height
+            height:
+                MediaQuery.of(context).size.height * 0.5, // Half screen height
             child: ChatPanel(currentContext: _currentContext),
           ),
-          
+
+          // 4. Audio Wave Animation (Centered Horizontal, 4/5 Vertical)
+          Positioned(
+            top: MediaQuery.of(context).size.height *
+                0.8, // 4/5 of screen height
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Consumer<VoiceController>(
+                builder: (context, vc, _) {
+                  return AudioWave(
+                    isActive: vc.isUserSpeaking, // Only animate on user speech
+                  );
+                },
+              ),
+            ),
+          ),
+
           // 4. Controls (Bottom Left - if needed explicitly, otherwise CameraOverlayView might handle it)
           // For now assuming CameraOverlayView handles its own controls or we can add them here later.
         ],
