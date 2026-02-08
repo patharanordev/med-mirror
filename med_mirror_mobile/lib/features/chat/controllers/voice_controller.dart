@@ -15,11 +15,13 @@ class VoiceController extends ChangeNotifier {
   bool _isUserSpeaking = false;
   bool _isProcessing = false;
   bool _isAutoMode = false;
+  double _audioLevel = 0.0; // 0.0 to 1.0 normalized audio level
 
   bool get isListening => _isListening;
   bool get isUserSpeaking => _isUserSpeaking;
   bool get isProcessing => _isProcessing;
   bool get isAutoMode => _isAutoMode;
+  double get audioLevel => _audioLevel;
 
   VoiceController(this._apiService, {VadHandler? vadHandler}) {
     _initVad(vadHandler);
@@ -79,6 +81,14 @@ class VoiceController extends ChangeNotifier {
     _vadHandler.onError.listen((msg) {
       print("VAD Error: $msg");
       _isListening = false;
+      notifyListenersSafe();
+    });
+
+    // Listen for real-time audio frame data to update audio level
+    _vadHandler.onFrameProcessed.listen((frame) {
+      if (_isDisposed || !_isUserSpeaking) return;
+      // frame.isSpeech is a probability (double 0.0-1.0), use directly as level
+      _audioLevel = frame.isSpeech.clamp(0.0, 1.0);
       notifyListenersSafe();
     });
   }

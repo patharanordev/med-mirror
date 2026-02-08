@@ -21,6 +21,7 @@ class _MainScreenState extends State<MainScreen> {
   double _skinVal = 0;
   bool _isCameraReady = false; // Initial state false until detected
   final CameraOverlayController _cameraController = CameraOverlayController();
+  final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
 
   @override
   void initState() {
@@ -30,6 +31,12 @@ class _MainScreenState extends State<MainScreen> {
       final voiceController = context.read<VoiceController>();
       voiceController.setAutoMode(true);
       voiceController.startRecording();
+
+      // Register callback for voice-to-text, routing to ChatPanel via GlobalKey
+      voiceController.setTextCallback((text) {
+        print("MainScreen: Voice callback received '$text'");
+        _chatPanelKey.currentState?.sendVoiceMessage(text);
+      });
     });
   }
 
@@ -162,7 +169,8 @@ class _MainScreenState extends State<MainScreen> {
             width: 400, // Fixed width
             height:
                 MediaQuery.of(context).size.height * 0.5, // Half screen height
-            child: ChatPanel(currentContext: _currentContext),
+            child:
+                ChatPanel(key: _chatPanelKey, currentContext: _currentContext),
           ),
 
           // 4. Audio Wave Animation (Centered Horizontal, 4/5 Vertical)

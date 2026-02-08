@@ -21,6 +21,9 @@ void main() {
   late StreamController<void> speechStartController;
   late StreamController<List<double>> speechEndController;
   late StreamController<String> errorController;
+  late StreamController<
+          ({List<double> frame, double isSpeech, double notSpeech})>
+      frameProcessedController;
 
   setUp(() {
     mockApiService = MockApiService();
@@ -29,6 +32,8 @@ void main() {
     speechStartController = StreamController<void>.broadcast();
     speechEndController = StreamController<List<double>>.broadcast();
     errorController = StreamController<String>.broadcast();
+    frameProcessedController = StreamController<
+        ({List<double> frame, double isSpeech, double notSpeech})>.broadcast();
 
     when(() => mockVadHandler.onSpeechStart)
         .thenAnswer((_) => speechStartController.stream);
@@ -36,6 +41,8 @@ void main() {
         .thenAnswer((_) => speechEndController.stream);
     when(() => mockVadHandler.onError)
         .thenAnswer((_) => errorController.stream);
+    when(() => mockVadHandler.onFrameProcessed)
+        .thenAnswer((_) => frameProcessedController.stream);
 
     when(() => mockVadHandler.startListening()).thenAnswer((_) async {});
     when(() => mockVadHandler.stopListening()).thenAnswer((_) async {});
@@ -50,6 +57,7 @@ void main() {
     speechStartController.close();
     speechEndController.close();
     errorController.close();
+    frameProcessedController.close();
   });
 
   test('Initial state is correct', () {

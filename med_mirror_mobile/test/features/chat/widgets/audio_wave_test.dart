@@ -1,52 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:provider/provider.dart';
 import 'package:med_mirror_mobile/features/chat/widgets/audio_wave.dart';
+import 'package:med_mirror_mobile/features/chat/controllers/voice_controller.dart';
+
+class MockVoiceController extends Mock implements VoiceController {}
 
 void main() {
-  testWidgets('AudioWave builds successfully', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(
-        body: AudioWave(isActive: false),
-      ),
-    ));
+  late MockVoiceController mockVoiceController;
 
-    expect(find.byType(AudioWave), findsOneWidget);
-    expect(find.byType(Row), findsOneWidget); // Visual structure
+  setUp(() {
+    mockVoiceController = MockVoiceController();
+    when(() => mockVoiceController.addListener(any())).thenReturn(null);
+    when(() => mockVoiceController.removeListener(any())).thenReturn(null);
+    when(() => mockVoiceController.audioLevel).thenReturn(0.5);
   });
 
-  testWidgets('AudioWave shows 5 bars', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(
-        body: AudioWave(isActive: false),
+  Widget createWidgetUnderTest({required bool isActive}) {
+    return ChangeNotifierProvider<VoiceController>.value(
+      value: mockVoiceController,
+      child: MaterialApp(
+        home: Scaffold(
+          body: AudioWave(isActive: isActive),
+        ),
       ),
-    ));
+    );
+  }
 
-    // AudioWave uses List.generate(5, ...) creating AnimatedContainer
-    expect(find.byType(AnimatedContainer), findsNWidgets(5));
+  testWidgets('AudioWave builds successfully', (WidgetTester tester) async {
+    await tester.pumpWidget(createWidgetUnderTest(isActive: false));
+    expect(find.byType(AudioWave), findsOneWidget);
+  });
+
+  testWidgets('AudioWave shows 12 bars', (WidgetTester tester) async {
+    await tester.pumpWidget(createWidgetUnderTest(isActive: true));
+    // AudioWave now uses 12 AnimatedContainers
+    expect(find.byType(AnimatedContainer), findsNWidgets(12));
   });
 
   testWidgets('AudioWave handles isActive change', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(
-        body: AudioWave(isActive: false),
-      ),
-    ));
+    await tester.pumpWidget(createWidgetUnderTest(isActive: false));
 
-    // Initially height 3 (min)
-    // Finding specific heights is hard without keys,
-    // but we can verify it pumps without error when switching state.
-
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(
-        body: AudioWave(isActive: true),
-      ),
-    ));
-
-    // Should start timer and animate
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpWidget(createWidgetUnderTest(isActive: true));
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Verify it's still there
     expect(find.byType(AudioWave), findsOneWidget);
   });
 }

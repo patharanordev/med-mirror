@@ -59,6 +59,8 @@ void main() {
     when(() => mockVoiceController.isListening).thenReturn(false); // Used in UI
     when(() => mockVoiceController.isUserSpeaking)
         .thenReturn(false); // Used in AudioWave
+    when(() => mockVoiceController.audioLevel)
+        .thenReturn(0.0); // Used in AudioWave
     when(() => mockVoiceController.setTextCallback(any()))
         .thenReturn(null); // Used in ChatPanel
   });
