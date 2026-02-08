@@ -149,7 +149,13 @@ class VoiceController extends ChangeNotifier {
     try {
       if (await Permission.microphone.request().isGranted) {
         try {
-          await _vadHandler.startListening();
+          await _vadHandler.startListening(
+            positiveSpeechThreshold:
+                0.7, // Increased from 0.5 to reduce sensitivity
+            negativeSpeechThreshold: 0.4, // Increased from 0.35
+            minSpeechFrames:
+                5, // Require 5 frames (default 3) before triggering
+          );
           _isListening = true;
           print("VAD: Started Listening");
         } catch (e) {
