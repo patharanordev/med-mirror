@@ -26,7 +26,7 @@ echo "4. Waiting for Local LLM (Ollama) to start..."
 sleep 10
 
 echo "5. Pulling MedGemma/Gemma model to Ollama..."
-docker exec -it med_mirror_ollama ollama pull gemma:2b
+docker exec med_mirror_ollama ollama pull gemma:2b
 
 echo "========================================================"
 echo "  Setup Complete!"
