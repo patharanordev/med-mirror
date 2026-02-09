@@ -15,3 +15,6 @@ hf_cache/*
 
 # log
 client/tsc_errors.txt
+
+# FVM Version Cache
+.fvm/
