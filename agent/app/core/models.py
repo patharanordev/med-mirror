@@ -10,9 +10,19 @@ class ChatRequest(BaseModel):
     history: Optional[List[dict]] = [] # [{'role': 'user', 'content': '...'}, ...]
     context: Optional[str] = "No specific skin condition detected yet."
     image_url: Optional[str] = None
+    thread_id: Optional[str] = None
 
 # --- Domain/Graph State Models ---
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     context: str
     image_url: Optional[str]
+    
+    # Diagnostic State
+    duration: Optional[str]
+    symptoms: Optional[str]  # itching, pain
+    allergies: Optional[str]
+    diagnosis: Optional[str]
+    
+    # Shopping State
+    shopping_interested: Optional[bool]

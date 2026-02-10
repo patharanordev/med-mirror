@@ -51,6 +51,7 @@ services:
       - edge_net
     volumes:
       - ./hf_cache:/root/.cache/huggingface
+      - ./agent:/app
     env_file:
       - ./agent/.env.winos
     depends_on:

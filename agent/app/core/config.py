@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.openai.com/v1"
     LLM_API_KEY: str = "sk-proj-placeholder"
     LLM_MODEL: str = "gpt-3.5-turbo"
+    
+    # Tool Settings
+    TAVILY_API_KEY: str = "tvly-placeholder"
 
     # STT Settings
     # Whisper model size: tiny, tiny.en, base, base.en, small, small.en, medium, medium.en, large-v2, large-v3
@@ -57,8 +60,23 @@ class Settings(BaseSettings):
     )
 
     def get_system_prompt(self) -> str:
-        """Get the system prompt for the configured language."""
-        return SYSTEM_PROMPTS.get(self.AGENT_LANGUAGE, SYSTEM_PROMPTS["en"])
+        """Get the base persona prompt for the agent."""
+        # Note: The specific logic for asking questions is now handled by the graph nodes.
+        # This prompt establishes the persona.
+        if self.AGENT_LANGUAGE == "th":
+            return """คุณคือผู้ช่วยทางการแพทย์อัจฉริยะ 'MedMirror AI'
+หน้าที่ของคุณคือการให้คำปรึกษาเบื้องต้นเกี่ยวกับอาการทางผิวหนัง
+บุคลิก: สุภาพ, เป็นมืออาชีพ, และมีความเป็นห่วงเป็นใย
+บริบทจากการตรวจจับภาพ: {context}
+
+หากมีคำถาม ให้ตอบตามความรู้ทางการแพทย์ทั่วไป แต่ห้ามวินิจฉัยโรคแบบฟันธง และแนะนำให้ไปพบแพทย์เสมอ"""
+        else:
+            return """You are an intelligent medical assistant 'MedMirror AI'.
+Your role is to provide preliminary consultation regarding skin conditions.
+Personality: Polite, professional, and caring.
+Context from image detection: {context}
+
+If asked, answer based on general medical knowledge but DO NOT definitively diagnose. Always advise seeing a doctor."""
 
 settings = Settings()
 

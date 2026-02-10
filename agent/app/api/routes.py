@@ -51,6 +51,7 @@ async def chat_endpoint(request: ChatRequest):
     """
     Streaming endpoint for the medical agent.
     """
+    logger.info(f"CHAT: Received request with {len(request.history)} history messages.")
     
     # 1. Convert history to LangChain format
     messages = []
@@ -77,11 +78,20 @@ async def chat_endpoint(request: ChatRequest):
             # Get the compiled graph from the service
             app_graph = agent_service.get_graph()
             
+            # Configure thread_id for persistence
+            import uuid
+            thread_id = request.thread_id or str(uuid.uuid4())
+            
+            config = {"configurable": {"thread_id": thread_id}}
+            
             # Stream the events from the graph
             has_streamed = False
-            async for event in app_graph.astream_events(inputs, version="v1"):
+            logger.info(f"CHAT: Starting astream_events for thread_id={thread_id}")
+            
+            async for event in app_graph.astream_events(inputs, config=config, version="v1"):
                 kind = event["event"]
-                print(f"DEBUG: Event Kind: {kind}")  # Debug log
+                name = event.get("name", "Unknown")
+                logger.info(f"CHAT: Event: {kind} | Name: {name}")
                 
                 # Filter for the token stream from the ChatModel or LLM
                 if kind in ["on_chat_model_stream", "on_llm_stream"]:
@@ -90,19 +100,29 @@ async def chat_endpoint(request: ChatRequest):
                     content = chunk.content if chunk else ""
                     
                     if content:
+                        # logger.info(f"CHAT: Stream Content: {content[:20]}...") 
                         has_streamed = True
                         yield f"data: {json.dumps({'content': content})}\n\n"
                 
                 # Fallback: If no streaming happened, catch the final output
                 elif kind == "on_chat_model_end" and not has_streamed:
+                     logger.info("CHAT: Caught on_chat_model_end")
                      output = event["data"].get("output")
                      if output and hasattr(output, "generations"):
                          # Standard ChatResult structure
                          text = output.generations[0][0].text
                          if text:
-                             print("DEBUG: Fallback to on_chat_model_end")
+                             logger.info(f"CHAT: Fallback Content: {text[:50]}...")
                              yield f"data: {json.dumps({'content': text})}\n\n"
                              has_streamed = True
+
+            yield "data: [DONE]\n\n"
+            
+        except Exception as e:
+            # Send error as a special event
+            logger.error(f"CHAT: Error in event_generator: {e}", exc_info=True)
+            error_msg = json.dumps({"error": str(e)})
+            yield f"data: {error_msg}\n\n"
 
             yield "data: [DONE]\n\n"
             
