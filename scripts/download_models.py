@@ -9,12 +9,9 @@ MODELS = {
         "local_dir": "models/segmentation"
     },
     # MedGemma is a gated model. You must accept terms on HF and provide a token.
-    # Change "google/medgemma-2b" to the exact repo ID once released/available to you.
-    # For testing standard Gemma, you can use "google/gemma-2b-it"
-    "medgemma": {
-        "repo_id": "google/gemma-2b-it", 
-        "local_dir": "models/medgemma"
-    }
+    # We use "google/medgemma-1.5-4b-it"
+    # MedGemma is now handled by a separate script (import_medgemma_model)
+    # because it requires specific compilation/quantization steps on the host.
 }
 
 def download_model(model_key, token=None):
@@ -24,6 +21,11 @@ def download_model(model_key, token=None):
 
     config = MODELS[model_key]
     print(f"⬇️  Downloading {model_key} ({config['repo_id']}) to {config['local_dir']}...")
+    
+    # Check if directory exists and is not empty
+    if os.path.exists(config['local_dir']) and any(os.scandir(config['local_dir'])):
+        print(f"✅ {model_key} already exists in {config['local_dir']}. Skipping download.")
+        return
     
     try:
         snapshot_download(

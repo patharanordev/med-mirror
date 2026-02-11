@@ -11,22 +11,28 @@ if ! command -v docker &> /dev/null; then
 fi
 
 echo "1. Stopping old services..."
-docker-compose -f docker-compose.mac.yml down
+docker-compose -f docker-compose.mac.yml down -v
 
 echo "2. Cleaning up dangling images..."
 docker rmi -f $(docker images -q --filter "dangling=true")
 
-echo "2.5 Skipping Model Download..."
-echo "    (If first time, run ./download_models.sh first)"
+echo "2.2 Starting Ollama Service (Required for Import)..."
+docker-compose -f docker-compose.mac.yml up -d ollama
+echo "Waiting for Ollama to initialize..."
+sleep 10
 
-echo "3. Building and Starting Services (for Apple Silicon)..."
+echo "2.5 Checking/Downloading Models..."
+./download_models.sh
+
+echo "3. Building and Starting Remaining Services..."
 docker-compose -f docker-compose.mac.yml up -d --build
 
 echo "4. Waiting for Local LLM (Ollama) to start..."
 sleep 10
 
-echo "5. Pulling MedGemma/Gemma model to Ollama..."
-docker exec med_mirror_ollama ollama pull gemma:2b
+echo "5. Using local MedGemma model..."
+echo "   (Ensure you ran ./download_models.sh to import medgemma-1.5:4b)"
+# docker exec med_mirror_ollama ollama list
 
 echo "========================================================"
 echo "  Setup Complete!"

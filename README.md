@@ -31,13 +31,13 @@ MedMirror is an intelligent, real-time medical analysis platform that transforms
 MedMirror is designed to run seamlessly on different hardware by choosing the best inference path:
 
 ### 🍎 macOS (Apple Silicon)
-- **Model**: `gemma3n:e2b` (Ollama)
+- **Model**: `medgemma-1.5-4b:latest` (Ollama)
 - **STT**: `faster-whisper` (CPU)
 - **Inference Mode**: **CPU-Optimized (Dockerized)**
 - **Service**: Runs via `docker-compose.mac.yml`.
 
 ### 🪟 Windows (NVIDIA GPU)
-- **Model**: `gemma3:4b` (Ollama)
+- **Model**: `medgemma-1.5-4b:latest` (Ollama)
 - **STT**: `faster-whisper` (CUDA/GPU)
 - **Inference Mode**: **NVIDIA RTX 4080 Acceleration**
 - **Service**: Runs via `docker-compose.win.yml` with CUDA 12.2 runtime.
@@ -60,22 +60,45 @@ STT_MODEL_SIZE=tiny
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-- **Docker Desktop**
-- **NVIDIA Drivers & Container Toolkit** (Windows only)
-- **Ollama** (Optional for Host-Mac mode)
+- **Ollama**: Must be installed and running in the background. [Download here](https://ollama.com).
+- **Hugging Face Token**: Required for MedGemma (gated model). Create a [Read Token here](https://huggingface.co/settings/tokens).
+- **Docker Desktop**: For running the services.
+- **NVIDIA Drivers & Container Toolkit** (Windows only): For GPU acceleration.
 
-### 2. Pull Gemma Model
-#### **macOS**
-```bash
-ollama pull gemma3n:e2b
-```
+### 2. Download & Install Models
+This step downloads necessary segmentation models and automatically converts/imports the MedGemma model.
 
 #### **Windows**
-```powershell
-ollama pull gemma3:4b
-```
+1. Run the downloader script:
+   ```powershell
+   .\download_models.bat
+   ```
+   *Follow the prompts in the new window (if any) to paste your HF Token.*
 
-### 3. Launching
+#### **macOS / Linux**
+1. Run the downloader script:
+   ```bash
+   ./download_models.sh
+   ```
+   *Follow the prompts.*
+
+> **Note**: This script automatically performs the following for MedGemma:
+> - Downloads weights from Hugging Face
+> - Builds conversion tools (llama.cpp)
+> - **Auto-converts** weights to GGUF format
+> - Quantizes to optimize for performance (Q4_K_M)
+> - Creates the Ollama model `medgemma-1.5-4b` ready for use.
+
+### 3. Verify Installation
+Ensure the model is correctly installed in Ollama:
+```bash
+ollama run medgemma-1.5:4b "Hello, I have a rash on my arm."
+```
+*(You should see a medical-context response)*
+
+
+
+### 4. Launching
 #### **macOS**
 ```bash
 docker-compose -f docker-compose.mac.yml up --build

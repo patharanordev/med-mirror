@@ -4,6 +4,8 @@ import { useEffect, useRef, memo } from "react";
 import { Send, Mic } from "lucide-react";
 import type { Message } from "@/hooks/useMedGemma";
 
+import { useSystemStatus } from "@/hooks/useSystemStatus";
+
 interface ChatInterfaceProps {
     messages: Message[];
     onSend: () => void;
@@ -28,8 +30,8 @@ const MessageBubble = memo(function MessageBubble({
         >
             <div
                 className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed glass text-shadow-sm ${msg.role === "user"
-                        ? "text-white/90 rounded-br-none border-r-4 border-white/30"
-                        : "text-blue-100 rounded-bl-none border-l-4 border-white"
+                    ? "text-white/90 rounded-br-none border-r-4 border-white/30"
+                    : "text-blue-100 rounded-bl-none border-l-4 border-white"
                     }`}
             >
                 {msg.content || (
@@ -49,6 +51,7 @@ export const ChatInterface = memo(function ChatInterface({
     userSpeaking,
 }: ChatInterfaceProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
+    const systemStatus = useSystemStatus();
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,8 +67,8 @@ export const ChatInterface = memo(function ChatInterface({
                 <div>
                     <h2 className="font-bold text-lg text-shadow">MedMirror Assistant</h2>
                     <div className="flex items-center gap-2 text-xs text-white/50">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse-green" />
-                        Online • Gemma-2b
+                        <span className={`w-2 h-2 rounded-full ${systemStatus.llm === "ready" ? "bg-green-500 animate-pulse-green" : "bg-yellow-500 animate-pulse"}`} />
+                        Online • {systemStatus.modelName || "Connecting..."}
                     </div>
                 </div>
             </div>
