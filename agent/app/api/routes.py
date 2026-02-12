@@ -88,34 +88,110 @@ async def chat_endpoint(request: ChatRequest):
             has_streamed = False
             logger.info(f"CHAT: Starting astream_events for thread_id={thread_id}")
             
+            # State tracking# State tracking
+            active_chain = None
+            is_model_reasoning = False
+            collected_content = {"thinking": [], "plan": [], "text": [], "tool": []}
+        
+            known_chains = [
+                "ThinkingChain",
+                "GeneralChatChain",
+                "InterviewExtractionChain",
+                "InterviewAskChain",
+                "DiagnosisChain",
+                "ShoppingProposalChain",
+                "ShoppingSummarizeChain"
+            ]
+
             async for event in app_graph.astream_events(inputs, config=config, version="v1"):
                 kind = event["event"]
-                name = event.get("name", "Unknown")
-                logger.info(f"CHAT: Event: {kind} | Name: {name}")
+                name = event.get("name")
+                tags = event.get("tags", [])
+
+                # 1. Handle START of ThinkingChain
+                # if kind == "on_chain_start" and name == "ThinkingChain":
+                #     active_chain = "ThinkingChain"
+                #     yield f"data: {json.dumps({'type': 'task', 'content': 'Analyzing request...'})}\n\n"
+                #     continue
+
+                # 2. Handle specific logic WHILE ThinkingChain is active
+                if active_chain == "ThinkingChain":
+                    # Suppress tokens from leaking into 'text'
+                    if kind in ["on_chat_model_stream", "on_llm_stream"]:
+                        data = event["data"]
+                        chunk = data.get("chunk")
+                        if chunk and chunk.content:
+                            collected_content["thinking"].append(chunk.content)
+                        continue 
+
+                    # 3. Handle END of ThinkingChain (Do this BEFORE resetting active_chain)
+                    if kind == "on_chain_end" and name == "ThinkingChain":
+                        active_chain = None # Reset here specifically
+                        output = event["data"].get("output")
+                        
+                        # Robust extraction of the 'todo' list
+                        plan = None
+                        if output:
+                            if hasattr(output, 'todo'): # Check if it's a Pydantic object
+                                plan = output.todo
+                            elif isinstance(output, dict) and 'todo' in output: # Check if it's a dict
+                                plan = output['todo']
+                        
+                        if plan:
+                            # Yield as 'todo' type as requested
+                            yield f"data: {json.dumps({'type': 'task', 'content': plan})}\n\n"
+                        continue
+
+                # 4. General tracker for other chains (Diagnosis, GeneralChat, etc.)
+                if kind == "on_chain_start" and name in known_chains:
+                    active_chain = name
+                elif kind == "on_chain_end" and name in known_chains:
+                    active_chain = None
+
+                # --- CASE 2: SUPPRESS INTERVIEW EXTRACTION ---
+                if active_chain == "InterviewExtractionChain":
+                    continue
                 
-                # Filter for the token stream from the ChatModel or LLM
+                # --- CASE 3: TOOL UPDATES ---
+                if "tool_search" in tags:
+                    if kind == "on_tool_start":
+                        yield f"data: {json.dumps({'type': 'tool', 'content': 'Searching...'})}\n\n"
+                    elif kind == "on_tool_end":
+                        yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
+                    continue
+
+                # --- CASE 4: DEFAULT TEXT STREAMING ---
                 if kind in ["on_chat_model_stream", "on_llm_stream"]:
                     data = event["data"]
                     chunk = data.get("chunk")
                     content = chunk.content if chunk else ""
                     
                     if content:
-                        # logger.info(f"CHAT: Stream Content: {content[:20]}...") 
-                        has_streamed = True
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                
-                # Fallback: If no streaming happened, catch the final output
-                elif kind == "on_chat_model_end" and not has_streamed:
-                     logger.info("CHAT: Caught on_chat_model_end")
-                     output = event["data"].get("output")
-                     if output and hasattr(output, "generations"):
-                         # Standard ChatResult structure
-                         text = output.generations[0][0].text
-                         if text:
-                             logger.info(f"CHAT: Fallback Content: {text[:50]}...")
-                             yield f"data: {json.dumps({'content': text})}\n\n"
-                             has_streamed = True
+                        # Handle special reasoning tokens (DeepSeek pattern)
+                        if any(tag in content for tag in ["<think>", "<unused94>"]):
+                            is_model_reasoning = True
+                        
+                        msg_type = "thinking" if is_model_reasoning else "text"
+                        
+                        if any(tag in content for tag in ["</think>", "<unused95>"]):
+                            is_model_reasoning = False
+                            msg_type = "thinking" # Closing tag still belongs to thinking
 
+                        collected_content[msg_type].append(content)
+                        yield f"data: {json.dumps({'type': msg_type, 'content': content})}\n\n"
+                
+                # Fallback for non-streaming models
+                elif kind == "on_chat_model_end" and active_chain and active_chain != "ThinkingChain":
+                     pass
+
+            # Final Debug Summary
+            debug_payload = {
+                "thinking": "".join(collected_content["thinking"]),
+                "plan": ", ".join(collected_content["plan"]),
+                "text": "".join(collected_content["text"])
+            }
+
+            yield f"data: {json.dumps({'type': 'debug', 'content': json.dumps(debug_payload)})}\n\n"
             yield "data: [DONE]\n\n"
             
         except Exception as e:
