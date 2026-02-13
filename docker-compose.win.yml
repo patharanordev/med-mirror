@@ -75,6 +75,7 @@ services:
       - "11434:11434"
     networks:
       - edge_net
+      - ecosystem_commonnet
     volumes:
       - ~/.ollama:/root/.ollama
     # GPU Support for Windows (WSL2 / NVIDIA Container Toolkit)
@@ -86,7 +87,9 @@ services:
               count: 1
               capabilities: [gpu]
 
-
 networks:
   edge_net:
     driver: bridge
+  ecosystem_commonnet:
+    name: commonnet
+    external: true

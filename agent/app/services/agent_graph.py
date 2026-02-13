@@ -3,19 +3,23 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from app.core.config import settings
 from app.core.models import AgentState
 # IMPORT THE KNOWLEDGE MODULE
 from app.core.medical_knowledge import analyze_input
+import os
 
 # --- Structured Outputs ---
 class ThinkingResult(BaseModel):
     analysis: str = Field(description="Extremely brief medical analysis.")
-    todo: List[str] = Field(description="Plan of action.")
+    todo: List[str] = Field(description="Plan of action. Must be a list of 5-10 concise bullet points.")
     next_step: Literal['general_chat', 'interview', 'diagnosis', 'shopping_search']
+
+class QuestionResult(BaseModel):
+    question: str = Field(description="A single, concise (max 1-2 sentences), and smart question to ask the user.")
 
 class MedicalExtraction(BaseModel):
     body_part: Optional[str] = Field(None, description="The affected body area (Face, Hair, Skin, etc).")
@@ -33,6 +37,14 @@ class AgentService:
             temperature=0, 
             streaming=True
         )
+
+        self.llm_diagnosis = ChatOpenAI(
+            base_url=settings.LLM_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+            model=settings.LLM_MODEL_DIAGNOSIS,
+            temperature=0,
+            streaming=True
+        )
         
         self.tavily_tool = None
         try:
@@ -44,6 +56,12 @@ class AgentService:
 
         self.checkpointer = MemorySaver()
         self.graph = self._build_graph()
+        
+        if not os.path.exists("output"):
+            os.mkdir("output")
+        image = self.graph.get_graph().draw_mermaid_png()
+        with open("output/graph.png", "wb") as f:
+            f.write(image)
 
     async def warmup(self):
         try:
@@ -52,21 +70,27 @@ class AgentService:
         except Exception as e:
             print(f"AGENT: LLM Warmup Failed: {e}")
 
-    # --- NODE 1: THINKING (STRICT MEDICAL MODE) ---
+    # --- NODE 1: THINKING (ROUTER) ---
     async def _thinking_node(self, state: AgentState, config: RunnableConfig):
         print("--- THINKING NODE ---")
         
         last_msg = state['messages'][-1].content
-        analysis = analyze_input(last_msg)
-
-        # HITL Guardrail: Immediate routing for detected idioms like "panda"
-        if analysis['hints']:
-            return {
-                "todo": ["Identify symptoms from idiom"], 
-                "next_step": "interview"
-            }
         
-        system_msg = "Route to 'interview' for medical/skin issues, else 'general_chat'."
+        # 1. System Prompt for Routing
+        system_msg = """You are the 'Brain' of MedMirror. 
+        Decide the next step based on the user's input.
+        
+        Routing Rules:
+        - 'general_chat': Greetings, small talk, jokes, or non-medical questions.
+        - 'interview': User mentions a body part, symptom, or problem (e.g., "my face is red", "panda eyes").
+        - 'shopping_search': User explicitly asks to BUY products or RECOMENDATIONS for products.
+        - 'diagnosis': (Rarely used directly) Only if ALL info (symptoms, duration, allergies) is present.
+
+        Task: Generate a 'todo' list with 2-5 specific steps for the next stage (e.g., "Ask about duration", "Check for allergies", "Analyze symptom severity").
+
+        Context: {context}
+        """
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
             MessagesPlaceholder("messages"),
@@ -78,46 +102,66 @@ class AgentService:
         )
         
         try:
-            result = await chain.ainvoke(state, config=config)
+            # Inject context into state for the thinking node
+            input_state = {**state, "context": state.get("context", "No context")}
+            result = await chain.ainvoke(input_state, config=config)
             return {"todo": result.todo, "next_step": result.next_step}
         except Exception as e:
             # Fallback logic
+            print(f"Thinking Error: {e}")
             return {"next_step": "general_chat"}
 
     async def _general_chat_node(self, state: AgentState, config: RunnableConfig):
         prompt = ChatPromptTemplate.from_messages([
             ("system", settings.get_system_prompt()),
-            ("system", "User is chatting casually. Be friendly. If they made a joke (like 'panda'), acknowledge it but ask if they have skin/hair concerns."),
+            ("system", "Keep it short (1-2 sentences). Be smart & witty."),
             MessagesPlaceholder("messages"),
         ])
-        response = await (prompt | self.llm).ainvoke(state, config=config)
+        chain = prompt | self.llm
+        response = await chain.ainvoke(state, config=config.copy() | {"run_name": "GeneralChatChain"})
         return {"messages": [response]}
 
     async def _interview_node(self, state: AgentState, config: RunnableConfig):
         last_message = state['messages'][-1].content
-        analysis = analyze_input(last_message)
         
         extract_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Extract medical data (Body Part, Symptoms, Duration, Allergies)."),
+            ("system", "Extract: Body Part, Duration, Symptoms, Allergies. Return None if not found."),
             ("human", last_message)
         ])
-        extractor = extract_prompt | self.llm.with_structured_output(MedicalExtraction)
+        extractor = (extract_prompt | self.llm.with_structured_output(MedicalExtraction)).with_config(
+            {"run_name": "InterviewExtractionChain"}
+        )
         data = await extractor.ainvoke({})
         
-        updates = {k: v for k, v in data.model_dump().items() if v is not None}
+        # Merge new data
+        if data:
+            updates = {k: v for k, v in data.dict().items() if v is not None}
+        else:
+            updates = {}
         current_state = {**state, **updates}
 
-        questions = {
-            "body_part": "Which part of the body is affected? (e.g., face, arms)",
-            "symptoms": "What are your symptoms? (e.g., itchy, painful, or just dark spots)",
-            "duration": "How many days have you had this?",
-            "allergies": "Do you have any history of drug allergies?"
-        }
+        # Check for missing fields
+        required_fields = ["body_part", "symptoms", "duration", "allergies"]
+        missing_fields = [f for f in required_fields if not current_state.get(f)]
+
+        if missing_fields:
+            next_field = missing_fields[0]
             
-        for field, question in questions.items():
-            if not current_state.get(field):
-                # Return ONLY the short question and stop (HITL)
-                return {**updates, "messages": [AIMessage(content=question)]}
+            # Dynamic Question Generation
+            q_system = settings.get_system_prompt()
+            q_prompt = ChatPromptTemplate.from_messages([
+                ("system", q_system),
+                ("system", f"Ask a SHORT, SMART question to get the '{next_field}'. Only ONE question. Max 1-2 sentences."),
+                MessagesPlaceholder("messages")
+            ])
+            
+            # Using with_structured_output for safety, or just plain string
+            q_chain = (q_prompt | self.llm.with_structured_output(QuestionResult)).with_config(
+               {"run_name": "InterviewAskChain"}
+            )
+            
+            q_result = await q_chain.ainvoke(state, config=config)
+            return {**updates, "messages": [AIMessage(content=q_result.question)]}
     
         return updates
 
@@ -125,7 +169,7 @@ class AgentService:
         # Added a strict "Concise" instruction to the system prompt
         prompt = ChatPromptTemplate.from_messages([
             ("system", settings.get_system_prompt()),
-            ("system", "Concise summary: Provide 1 sentence for the possible cause and exactly 2 short bullet points for care instructions."),
+            ("system", "CONCLUSION: 1-2 sentences diagnosis maximum. CARE: 2 short bullet points. TOTAL: 3-4 lines max."),
             MessagesPlaceholder("messages")
         ])
         
@@ -139,7 +183,8 @@ class AgentService:
         }
         
         try:
-            response = await (prompt | self.llm).ainvoke(inputs, config=config)
+            chain = (prompt | self.llm_diagnosis).with_config({"run_name": "DiagnosisChain"})
+            response = await chain.ainvoke(inputs, config=config)
             return {"messages": [response], "diagnosis": response.content}
         except Exception as e:
             print(f"Diagnosis Node Error: {e}")
@@ -158,7 +203,7 @@ class AgentService:
             
         prompt = ChatPromptTemplate.from_messages([
             ("system", settings.get_system_prompt()),
-            ("system", "Recommend products based on these search results:"),
+            ("system", "Recommend products based on these search results. keep it concise (max 1-2 sentences with list of products)."),
             ("user", content)
         ])
         
@@ -167,7 +212,9 @@ class AgentService:
             "context": state.get("context", "No context"),
         }
         
-        response = await (prompt | self.llm).ainvoke(inputs, config=config)
+        
+        chain = (prompt | self.llm).with_config({"run_name": "ShoppingSummarizeChain"})
+        response = await chain.ainvoke(inputs, config=config)
         return {"messages": [response]}
 
     # --- GRAPH ---

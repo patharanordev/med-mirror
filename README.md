@@ -158,3 +158,11 @@ python agent/tests/test_streaming.py
 - **Mirror Fix**: Both live preview and captured frames are now horizontally flipped to match user intuition.
 - **VAD Stability**: Fixed `InvalidStateError` race conditions in browser SpeechRecognition for smoother Thai voice input.
 - **Gemma 3 Migration**: Switched to the Gemma 3 family for superior medical text comprehension and multimodal reasoning.
+
+## Contributing
+
+### Tracing
+
+- **LangSmith**: [LangSmith](https://smith.langchain.com/) is a platform for debugging, testing, and monitoring LLM applications. It is used to trace the execution of the agent and to debug any issues that may arise. You can enable tracing by setting the `LANGSMITH_TRACING` environment variable to `true` and the `LANGSMITH_API_KEY` environment variable to your LangSmith API key.
+
+![ex-tracing](./assets/ex-tracing.jpg)
