@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.models import ChatRequest
 from app.services.agent_graph import agent_service
 from app.services.stt_service import stt_service
+from langgraph.types import Command
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -44,8 +45,8 @@ async def speech_to_text(file: UploadFile = File(...)):
         logger.error(f"STT: Transcription FAILED: {e}", exc_info=True)
         return {"error": str(e), "text": ""}
 
-@router.post("/chat")
-async def chat_endpoint(request: ChatRequest):
+@router.post("/chat/{thread_id}")
+async def chat_endpoint(request: ChatRequest, thread_id:str):
     """
     Streaming endpoint for the medical agent.
     """
@@ -74,118 +75,116 @@ async def chat_endpoint(request: ChatRequest):
     async def event_generator():
         try:
             app_graph = agent_service.get_graph()
-            thread_id = request.thread_id or str(uuid.uuid4())
-            config = {"configurable": {"thread_id": thread_id}}
+            config = {
+                "configurable": {
+                    "thread_id": thread_id,
+                    "run_id": str(uuid.uuid4())
+                }
+            }
             
-            logger.info(f"CHAT: Starting astream_events for thread_id={thread_id}")
+            logger.info(f"CHAT: Starting astream for thread_id={thread_id}")
             
             # State tracking
-            active_chain = None
             is_model_reasoning = False
-            collected_content = {"thinking": [], "plan": [], "text": [], "tool": []}
-        
-            known_chains = [
-                "ThinkingChain",
-                "GeneralChatChain",
-                "InterviewExtractionChain",
-                "InterviewAskChain",
-                "DiagnosisChain",
-                "ShoppingProposalChain",
-                "ShoppingSummarizeChain"
-            ]
+            collected_content = {"thinking": [], "plan": [], "text": []}
 
-            async for event in app_graph.astream_events(inputs, config=config, version="v1"):
-                kind = event["event"]
-                name = event.get("name")
-                tags = event.get("tags", [])
+            # Check for existing interrupts
+            snapshot = await app_graph.aget_state(config)
+            
+            if snapshot.next and len(snapshot.tasks) > 0 and snapshot.tasks[0].interrupts:
+                 # Resume from interrupt
+                logger.info(f"CHAT: Resuming from interrupt for thread_id={thread_id}")
+                # The user's message IS the answer/resume value
+                # We use the raw message content as the resume value
+                runner = app_graph.astream(
+                    Command(resume={
+                        "interrupt_response": request.message,
+                        "run_id": request.run_id
+                    }), 
+                    config=config, 
+                    stream_mode=["messages", "updates"]
+                )
+            else:
+                # Start new run
+                logger.info(f"CHAT: Starting new run for thread_id={thread_id}")
+                runner = app_graph.astream(inputs, config=config, stream_mode=["messages", "updates"])
 
-                # --- 1. HANDLE CHAIN START ---
-                if kind == "on_chain_start" and name in known_chains:
-                    active_chain = name
-                    
-                    # Notify UI that reasoning is starting
-                    if name == "ThinkingChain":
-                        yield f"data: {json.dumps({'type': 'task', 'content': 'Analyzing request...'})}\n\n"
-                    continue # Skip to next event
-
-                # --- 2. HANDLE INNER EVENTS FOR ACTIVE CHAINS ---
+            async for chunk in runner:
+                mode, data = chunk
                 
-                # A. Thinking Chain Logic
-                if active_chain == "ThinkingChain":
-                    if kind in ["on_chat_model_stream", "on_llm_stream"]:
-                        chunk = event["data"].get("chunk")
-                        content = chunk.content if chunk else ""
-                        
-                        if content:
-                            if any(tag in content for tag in ["<think>", "<unused94>"]):
-                                is_model_reasoning = True
-                            
-                            if any(tag in content for tag in ["</think>", "<unused95>"]):
-                                is_model_reasoning = False
-                                yield f"data: {json.dumps({'type': 'thinking', 'content': content})}\n\n"
-                                continue
-
-                            # Stream reasoning tokens; hide raw JSON
-                            if is_model_reasoning:
-                                collected_content["thinking"].append(content)
-                                yield f"data: {json.dumps({'type': 'thinking', 'content': content})}\n\n"
-                        continue 
-
-                    # Completion of ThinkingChain
-                    if kind == "on_chain_end" and name == "ThinkingChain":
-                        output = event["data"].get("output")
-                        plan = None
-                        
-                        if output:
-                            if hasattr(output, 'todo'):
-                                plan = output.todo
-                            elif isinstance(output, dict) and 'todo' in output:
-                                plan = output['todo']
-                        
-                        if plan:
-                            collected_content["plan"].append(json.dumps(plan))
-                            yield f"data: {json.dumps({'type': 'task', 'content': plan})}\n\n"
-                        
-                        active_chain = None # Reset chain status
-                    continue
-
-                # B. Suppression Logic for internal extractions
-                if active_chain == "InterviewExtractionChain":
-                    if kind == "on_chain_end" and name == "InterviewExtractionChain":
-                        active_chain = None
-                    continue
-
-                # --- 3. HANDLE CHAIN END FOR ALL OTHER CHAINS ---
-                if kind == "on_chain_end" and name in known_chains:
-                    active_chain = None
-                    continue
-                
-                # --- 4. TOOL UPDATES ---
-                if "tool_search" in tags:
-                    if kind == "on_tool_start":
-                        yield f"data: {json.dumps({'type': 'tool', 'content': 'Searching...'})}\n\n"
-                        continue
-                    elif kind == "on_tool_end":
-                        yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
-                        continue
-
-                # --- 5. DEFAULT TEXT STREAMING ---
-                if kind in ["on_chat_model_stream", "on_llm_stream"]:
-                    chunk = event["data"].get("chunk")
-                    content = chunk.content if chunk else ""
+                # --- MODE: MESSAGES (Tokens) ---
+                if mode == "messages":
+                    message_chunk, metadata = data
+                    content = message_chunk.content
                     
                     if content:
-                        if any(tag in content for tag in ["<think>", "<unused94>"]):
+                        # Simple reasoning tag detection
+                        if "<think>" in content or "<unused94>" in content:
                             is_model_reasoning = True
+                            # Notify UI that reasoning is starting if we just switched
+                            yield f"data: {json.dumps({'type': 'task', 'content': 'Thinking...'})}\n\n"
                         
                         msg_type = "thinking" if is_model_reasoning else "text"
                         
-                        if any(tag in content for tag in ["</think>", "<unused95>"]):
+                        if "</think>" in content or "<unused95>" in content:
                             is_model_reasoning = False
-                            msg_type = "thinking" 
+                            msg_type = "thinking"
 
                         collected_content[msg_type].append(content)
                         yield f"data: {json.dumps({'type': msg_type, 'content': content})}\n\n"
+                    continue
+
+                # --- MODE: UPDATES (State Changes & Interrupts) ---
+                elif mode == "updates":
+                    # Best Practice: Handle interrupts explicitly from the updates stream
+                    interrupt = data.get("__interrupt__")
+                    if interrupt:
+                        interrupt, = interrupt
+
+                        yield f"data: {json.dumps({'type': 'interrupt', 'content': interrupt.value})}\n\n"
+                        continue
+                    
+                    # Handle Node Updates
+                    # 1. Thinking Node - Extract Plan
+                    if "thinking" in data:
+                        output = data["thinking"]
+                        plan = None
+                        if output:
+                            # Handle Pydantic V1 (.dict()) or plain dict or object attr
+                            if hasattr(output, 'todo'):
+                                plan = output.todo
+                            elif isinstance(output, dict):
+                                plan = output.get('todo')
+                                if not plan and 'todo' in output: 
+                                    plan = output['todo']
+                        
+                        if plan:
+                             collected_content["plan"].append(json.dumps(plan))
+                             yield f"data: {json.dumps({'type': 'task', 'content': plan})}\n\n"
+
+                    # 2. Interview Node - Extract Profile
+                    if "interview" in data:
+                        output = data["interview"]
+                        updates = {}
+                        
+                        data_src = output
+                        if hasattr(output, 'dict'):
+                             data_src = output.dict()
+                        
+                        if isinstance(data_src, dict):
+                            for key in ["body_part", "duration", "symptoms", "allergies"]:
+                                if data_src.get(key):
+                                    updates[key] = data_src[key]
+
+                        if updates:
+                            yield f"data: {json.dumps({'type': 'profile_update', 'content': updates})}\n\n"
+
+                    # 3. Shopping Node - Tool Search Completion (Inferred)
+                    if "shopping_search" in data:
+                        # If we get an update from shopping_search, it means the search/recommendation is done.
+                        # We can't easily see "start" of tool in this mode, but we can confirm completion.
+                         yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
+
 
             # --- FINAL OUTPUT ---
             debug_payload = {

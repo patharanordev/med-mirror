@@ -5,7 +5,7 @@ info:
 
 http:
   method: POST
-  url: http://localhost:8001/chat
+  url: http://localhost:8001/chat/1
   headers:
     - name: Content-Type
       value: application/json
@@ -13,7 +13,7 @@ http:
     type: json
     data: |-
       {
-          "message": "I have dark circle..."
+          "message": "Great... I’m basically a panda’s twin at this point."
       }
   auth: inherit
 
