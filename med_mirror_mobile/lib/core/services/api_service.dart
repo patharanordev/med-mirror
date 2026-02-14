@@ -43,8 +43,12 @@ class ApiService {
   // Returns a Stream of text chunks (simulating the streaming response)
   // --- 2. Chat Agent ---
   // Returns a Stream of text chunks (simulating the streaming response)
-  Stream<String> sendChat(String text, List<Message> history,
-      {String? context, String? imageUrl}) async* {
+  // Returns a Stream of dynamic (String for text, Map for interrupt)
+  Stream<dynamic> sendChat(String text, List<Message> history,
+      {required String threadId,
+      String? context,
+      String? imageUrl,
+      String? runId}) async* {
     final client = _client ?? http.Client();
     try {
       final payload = {
@@ -52,16 +56,21 @@ class ApiService {
         'history': history.map((m) => m.toJson()).toList(),
         'context': context,
         'image_url': imageUrl,
+        if (runId != null) 'run_id': runId,
       };
 
+      print("DEBUG: Sending Payload: $payload");
+
       // We will assume we talk directly to Agent Service on port 8001
-      final directUri = Uri.parse('$agentBaseUrl/chat');
+      final directUri = Uri.parse('$agentBaseUrl/chat/$threadId');
 
       final req = http.Request('POST', directUri);
       req.headers['Content-Type'] = 'application/json';
       req.body = jsonEncode(payload);
 
+      print("DEBUG: Sending chat request to $directUri");
       final response = await client.send(req);
+      print("DEBUG: Response headers: ${response.headers}");
 
       if (response.statusCode != 200) {
         throw Exception('Chat API Error: ${response.statusCode}');
@@ -87,14 +96,37 @@ class ApiService {
 
             if (dataStr.isEmpty) continue;
 
+            print("DEBUG: Line: $dataStr");
+
             try {
               final json = jsonDecode(dataStr);
-              if (json['content'] != null) {
-                yield json['content'];
+              final type = json['type'];
+              final content = json['content'];
+
+              print("DEBUG: Type: $type, Content Type: ${content.runtimeType}");
+
+              if (type == 'text') {
+                if (content is String) {
+                  yield content;
+                }
+              } else if (type == 'interrupt') {
+                if (content is Map) {
+                  print("DEBUG: Yielding Interrupt Map");
+                  yield {
+                    'type': 'interrupt',
+                    'question': content['question'] ?? "",
+                    'run_id': content['run_id']
+                  };
+                } else if (content is String) {
+                  yield content;
+                } else {
+                  print(
+                      "DEBUG: Content is NOT Map or String: ${content.runtimeType} -> $content");
+                }
               }
-            } catch (_) {
-              // Ignore parsing errors for non-json data or keep accumulating if needed
-              // But usually SSE data lines are complete JSONs
+              // Ignore 'task', 'profile_update', 'tool', 'debug' for now
+            } catch (e) {
+              print("DEBUG: Parse Error: $e");
             }
           }
         }

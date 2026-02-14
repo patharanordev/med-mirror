@@ -97,4 +97,8 @@ class AgentService:
     def get_graph(self):
         return self.graph
 
+    @property
+    def is_ready(self):
+        return self.graph is not None and self.llm is not None
+
 agent_service = AgentService()

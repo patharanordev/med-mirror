@@ -28,8 +28,8 @@ class InterviewNode:
                 "body_part": "",
                 "allergies": "",
                 "messages": [
-                    AIMessage(content=q_result.question), 
-                    HumanMessage(content=user_answer)
+                    AIMessage(content="How long has this been going on?"), 
+                    HumanMessage(content=duration)
                 ]
             },
         )

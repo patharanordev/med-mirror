@@ -54,6 +54,9 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
     
     # 1. Convert history to LangChain format
     messages = []
+    
+    logger.info(f"CHAT: Processing request. run_id in payload: {request.run_id}")
+    
     if request.history:
         for msg in request.history:
             if msg['role'] == 'user':

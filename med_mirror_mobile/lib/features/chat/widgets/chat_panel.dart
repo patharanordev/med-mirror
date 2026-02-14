@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../models/message.dart';
 import '../../../core/state/app_state.dart';
 import '../../../core/services/api_service.dart';
+import 'package:uuid/uuid.dart';
 
 class ChatPanel extends StatefulWidget {
   final String? currentContext; // Skin analysis context
@@ -25,6 +26,10 @@ class ChatPanelState extends State<ChatPanel> {
   final ScrollController _scrollCtrl = ScrollController();
 
   bool _isTyping = false;
+
+  // Persist threadId for the session
+  final String _threadId = const Uuid().v4();
+  String? _currentRunId;
 
   @override
   void initState() {
@@ -85,11 +90,32 @@ class ChatPanelState extends State<ChatPanel> {
       });
 
       String fullContent = "";
-      final stream =
-          api.sendChat(text, _messages, context: widget.currentContext);
+      // Pass _currentRunId to resume from interrupt if one exists
+      print("ChatPanel: Sending message with runId: $_currentRunId");
+      final stream = api.sendChat(text, _messages,
+          threadId: _threadId,
+          context: widget.currentContext,
+          runId: _currentRunId);
+
+      // Reset runId after use, assuming new turn clears previous interrupt state?
+      // Actually, if we are answering an interrupt, we send the ID.
+      // If we are starting new chat, ID is null.
+      // Agent handles validation.
+      _currentRunId = null;
 
       await for (final chunk in stream) {
-        fullContent += chunk;
+        if (chunk is String) {
+          fullContent += chunk;
+        } else if (chunk is Map) {
+          // Handle Interrupt Map
+          if (chunk['type'] == 'interrupt') {
+            final question = chunk['question'] ?? "";
+            _currentRunId = chunk['run_id']; // Store new runId for NEXT answer
+            fullContent += question;
+            print("ChatPanel: Received Interrupt with runId: $_currentRunId");
+          }
+        }
+
         if (mounted) {
           setState(() {
             _messages.last = Message(role: 'assistant', content: fullContent);
