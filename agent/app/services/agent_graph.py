@@ -1,22 +1,12 @@
 from typing import Dict, Any, List, Literal, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableConfig, RunnableLambda
-from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from app.core.config import settings
 from app.core.models import AgentState
-# IMPORT THE KNOWLEDGE MODULE
-from app.core.medical_knowledge import analyze_input
 import os
-
-# Import Nodes
-from app.workflow.med_friendly.nodes.thinking_node import ThinkingNode
-from app.workflow.med_friendly.nodes.general_chat_node import GeneralChatNode
-from app.workflow.med_friendly.nodes.interview_node import InterviewNode
-from app.workflow.med_friendly.nodes.diagnosis_node import DiagnosisNode
-from app.workflow.med_friendly.nodes.shopping_search_node import ShoppingSearchNode
+import asyncio
+import importlib
 
 class AgentService:
     def __init__(self):
@@ -44,55 +34,64 @@ class AgentService:
         except ImportError:
             pass
 
-        # Initialize Nodes
-        self.thinking_node = ThinkingNode(self.llm)
-        self.general_chat_node = GeneralChatNode(self.llm)
-        self.interview_node = InterviewNode(self.llm)
-        self.diagnosis_node = DiagnosisNode(self.llm_diagnosis)
-        self.shopping_search_node = ShoppingSearchNode(self.llm, self.tavily_tool)
-
         self.checkpointer = MemorySaver()
-        self.graph = self._build_graph()
+        
+        # Load Workflow based on environment variable
+        self.active_workflow = os.getenv("ACTIVE_WORKFLOW", "med_gemma_4b")
+        print(f"AGENT: Loading workflow '{self.active_workflow}'...")
+        
+        if self.active_workflow == "med_gemma_27b":
+            from app.workflow.med_gemma_27b.graph import build_graph
+        elif self.active_workflow == "med_gemma_4b":
+            from app.workflow.med_gemma_4b.graph import build_graph
+        else:
+            raise ValueError(f"Unknown workflow: {self.active_workflow}")
+            
+        self.graph = build_graph(self.llm, self.llm_diagnosis, self.checkpointer, self.tavily_tool)
         
         if not os.path.exists("output"):
             os.mkdir("output")
-        image = self.graph.get_graph().draw_mermaid_png()
-        with open("output/graph.png", "wb") as f:
-            f.write(image)
+        try:
+            image = self.graph.get_graph().draw_mermaid_png()
+            with open("output/graph.png", "wb") as f:
+                f.write(image)
+        except Exception:
+            pass
 
     async def warmup(self):
-        try:
-            await self.llm.ainvoke("hi")
-            print("AGENT: LLM Warmup Complete.")
-        except Exception as e:
-            print(f"AGENT: LLM Warmup Failed: {e}")
-
-    # --- GRAPH ---
-    def _build_graph(self):
-        workflow = StateGraph(AgentState)
-        workflow.add_node("thinking", self.thinking_node)
-        workflow.add_node("general_chat", self.general_chat_node)
-        workflow.add_node("interview", self.interview_node)
-        workflow.add_node("diagnosis", self.diagnosis_node)
-        workflow.add_node("shopping_search", self.shopping_search_node)
-
-        workflow.set_entry_point("thinking")
+        print("AGENT: Starting Comprehensive Warmup...")
         
-        workflow.add_conditional_edges("thinking", lambda x: x['next_step'], 
-            {"general_chat": "general_chat", "interview": "interview", 
-             "diagnosis": "diagnosis", "shopping_search": "shopping_search"})
-        
-        def route_interview(state):
-            if all([state.get("body_part"), state.get("symptoms"), state.get("duration"), state.get("allergies")]):
-                return "diagnosis"
-            return END
-            
-        workflow.add_conditional_edges("interview", route_interview, {"diagnosis": "diagnosis", END: END})
-        workflow.add_edge("general_chat", END)
-        workflow.add_edge("diagnosis", END)
-        workflow.add_edge("shopping_search", END)
+        async def warm_main_llm():
+            try:
+                # Warm up the graph (Thinking Node is usually entry)
+                print("AGENT: Warming up Main Graph (Thinking Node)...")
+                dummy_state = {
+                    "messages": [HumanMessage(content="hi")],
+                    "context": "Warmup context"
+                }
+                config = {"configurable": {"thread_id": "warmup"}}
+                # Just run one step or invoke
+                # We use ainvoke but we need to handle the stream or result.
+                # Since we just want to wake it up, running it is enough.
+                # However, we must be careful not to trigger a long conversation loop.
+                # But ThinkingNode usually returns a plan and stops or goes to next.
+                # Let's just invoke.
+                await self.graph.ainvoke(dummy_state, config=config)
+                print("AGENT: Main Graph Warmup Complete.")
+            except Exception as e:
+                print(f"AGENT: Main Graph Warmup Failed: {e}")
 
-        return workflow.compile(checkpointer=self.checkpointer)
+        async def warm_diagnosis_llm():
+            try:
+                print("AGENT: Warming up Diagnosis LLM...")
+                await self.llm_diagnosis.ainvoke("hi")
+                print("AGENT: Diagnosis LLM Warmup Complete.")
+            except Exception as e:
+                print(f"AGENT: Diagnosis LLM Warmup Failed: {e}")
+
+        # Run both warmups in parallel
+        await asyncio.gather(warm_main_llm(), warm_diagnosis_llm())
+        print("AGENT: All Models Warmup Complete.")
 
     def get_graph(self):
         return self.graph

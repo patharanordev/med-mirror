@@ -43,7 +43,7 @@ MedMirror is designed to run seamlessly on different hardware by choosing the be
 - **Service**: Runs via `docker-compose.win.yml` with CUDA 12.2 runtime.
 
 ### 🔧 Configuration via .env
-You can customize the agent language and STT model size in `.env.local` (or your OS-specific env file):
+You can customize the agent language and STT model size in `.env.winos` or `.env.macos`:
 
 ```env
 # Agent Language (th = Thai, en = English)

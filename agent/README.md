@@ -2,6 +2,47 @@
 
 This directory contains the Python-based medical AI agent that runs via FastAPI and LangGraph.
 
+## Workflows & Model Configuration
+
+The agent supports two distinct workflows tailored for different model sizes and computational resources. You can switch between them by setting the `ACTIVE_WORKFLOW` environment variable in your `.env` file.
+
+### 1. `med_gemma_4b` (Default / Edge)
+Optimized for speed and lower resource usage (e.g., local laptops, edge devices).
+- **Workflow Logic**: `app/workflow/med_gemma_4b/graph.py`
+- **Recommended Models**:
+  - Main LLM: `qwen3:1.7b` (or similar lightweight model)
+  - Diagnosis LLM: `medgemma-1.5:4b`
+
+**Configuration (.env):**
+```bash
+ACTIVE_WORKFLOW=med_gemma_4b
+LLM_MODEL=qwen3:1.7b
+LLM_MODEL_DIAGNOSIS=medgemma-1.5:4b
+```
+
+| Workflow for MedGemma1.5:4b | Diagnosis Subgraph |
+|-----------------------------|--------------------|
+|![ex-graph-for-medgemma4b](./assets/images/ex-graph-medgemma-4b.png) | ![ex-diagnosis-subgraph](./assets/images/ex-diagnosis-subgraph.png)|
+
+### 2. `med_gemma_27b` (High Accuracy)
+Optimized for deep medical reasoning and higher accuracy. Requires significantly more VRAM.
+- **Workflow Logic**: `app/workflow/med_gemma_27b/graph.py`
+- **Recommended Models**:
+  - Main LLM: `qwen3:8b` (or larger)
+  - Diagnosis LLM: `medgemma:27b`
+
+**Configuration (.env):**
+```bash
+ACTIVE_WORKFLOW=med_gemma_27b
+LLM_MODEL=qwen3:8b
+LLM_MODEL_DIAGNOSIS=medgemma:27b
+```
+
+| Workflow for MedGemma:27b |
+|---------------------------|
+| ![ex-graph-for-medgemma27b](./assets/images/ex-graph-medgemma-27b.png) |
+
+
 ## Requirements
 
 - **Python 3.12+**

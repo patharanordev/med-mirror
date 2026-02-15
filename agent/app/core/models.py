@@ -18,9 +18,22 @@ class AgentState(TypedDict):
     context: str
     image_url: Optional[str]
     
-    # Diagnostic State
+    # Diagnosis State
+    diagnosis_progress: Optional[List[str]] # Log of reasoning
+    diagnosis_thought_process: Optional[str] # Raw thought from diagnosis node
+    differential_diagnosis: Optional[List[str]]
+    diagnostic_question: Optional[str]
+    is_critical: Optional[bool]
+    diagnosis_confidence: Optional[float]
+    
+    # Diagnosis Subgraph State
+    patient_info: Optional[dict] # Stores the extracted PatientInfo
+    missing_keys: Optional[List[str]]
+    diagnosis_complete: Optional[bool]
+
+    # Diagnosis State (Original - kept for compatibility if needed, using 'diagnosis' as final result)
     duration: Optional[str]
-    symptoms: Optional[str]  # itching, pain
+    symptoms: Optional[str]
     allergies: Optional[str]
     diagnosis: Optional[str]
     
@@ -29,7 +42,9 @@ class AgentState(TypedDict):
 
     # Thinking / Planning State
     todo: Optional[List[str]]
-    next_step: Optional[Literal['general_chat', 'interview', 'diagnosis', 'shopping_search']]
+    thinking_process: Optional[str]
+    next_step: Optional[Literal['general_chat', 'diagnosis', 'shopping_search', 'explain']]
+    language: Optional[str] # Detected language of the user
 
 # --- Structured Outputs (Pydantic V1 for LangChain compatibility) ---
 from pydantic.v1 import BaseModel as BaseModelV1, Field as FieldV1
@@ -37,7 +52,17 @@ from pydantic.v1 import BaseModel as BaseModelV1, Field as FieldV1
 class ThinkingResult(BaseModelV1):
     analysis: str = FieldV1(description="Extremely brief medical analysis.")
     todo: List[str] = FieldV1(description="Plan of action. Must be a list of 2-5 concise bullet points.")
-    next_step: Literal['general_chat', 'interview', 'diagnosis', 'shopping_search']
+    next_step: Literal['general_chat', 'diagnosis', 'shopping_search']
+    language: str = FieldV1(description="Detected language of the user (e.g., 'English', 'Thai', 'Chinese', 'Spanish').")
+
+class DiagnosisResult(BaseModelV1):
+    reasoning: str = FieldV1(description="Brief analysis of current symptoms and history. This is internal clinical thought (e.g., 'User mentioned dark circles, must rule out Allergic Shiners before assuming sleep deprivation.')")
+    differential_diagnosis: List[str] = FieldV1(description="List of possible conditions (top 3).")
+    next_step: Literal['ask_question', 'explain'] = FieldV1(description="Decision: Ask more info OR give diagnosis.")
+    question: Optional[str] = FieldV1(None, description="If next_step is ask_question, provide ONE clear question.")
+    final_diagnosis: Optional[str] = FieldV1(None, description="If next_step is explain, provide the diagnosis name.")
+    is_critical: bool = FieldV1(False, description="True if immediate medical attention is needed.")
+    confidence: float = FieldV1(description="Confidence score 0.0-1.0")
 
 class QuestionResult(BaseModelV1):
     question: str = FieldV1(description="A single, concise (max 1-2 sentences), and smart question to ask the user.")
@@ -48,3 +73,13 @@ class MedicalExtraction(BaseModelV1):
     symptoms: Optional[str] = FieldV1(None, description="Symptoms descriptions.")
     allergies: Optional[str] = FieldV1(None, description="History of allergies.")
     shopping_interested: Optional[bool] = FieldV1(None, description="True if user asks for products.")
+
+# --- Diagnosis Subgraph Models ---
+class PatientInfo(BaseModelV1):
+    onset_and_duration: Optional[str] = FieldV1(None, description="Time duration (onset) and how long it has been.")
+    location_and_spread: Optional[str] = FieldV1(None, description="Location of symptoms and if it spreads.")
+    associated_symptoms: Optional[str] = FieldV1(None, description="Associated symptoms like itching, pain, bleeding.")
+    medical_background: Optional[str] = FieldV1(None, description="History of similar conditions or underlying diseases.")
+    triggers: Optional[str] = FieldV1(None, description="Potential triggers (new products, activities, environment).")
+    diet_history: Optional[str] = FieldV1(None, description="Recent diet changes or relevant food intake.")
+    lifestyle_and_sleep: Optional[str] = FieldV1(None, description="Sleep patterns, stress, lifestyle factors.")

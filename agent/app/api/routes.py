@@ -115,25 +115,34 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
             async for chunk in runner:
                 mode, data = chunk
                 
-                # --- MODE: MESSAGES (Tokens) ---
                 if mode == "messages":
                     message_chunk, metadata = data
                     content = message_chunk.content
                     
                     if content:
-                        # Simple reasoning tag detection
+                        # Determine message type based on Node
+                        node_name = metadata.get("langgraph_node")
+                        
+                        # Default to 'text' (visible in chat)
+                        msg_type = "text"
+                        
+                        # Nodes that should NOT appear in chat bubble
+                        if node_name in ["thinking", "diagnosis", "routing"]:
+                            msg_type = "thinking"
+                            
+                        # Also check for reasoning tags (DeepSeek style) just in case
                         if "<think>" in content or "<unused94>" in content:
                             is_model_reasoning = True
-                            # Notify UI that reasoning is starting if we just switched
+                            # Notify UI start of reasoning
                             yield f"data: {json.dumps({'type': 'task', 'content': 'Thinking...'})}\n\n"
                         
-                        msg_type = "thinking" if is_model_reasoning else "text"
-                        
+                        if is_model_reasoning:
+                            msg_type = "thinking"  # Hide reasoning content
+                            
                         if "</think>" in content or "<unused95>" in content:
                             is_model_reasoning = False
-                            msg_type = "thinking"
-
-                        collected_content[msg_type].append(content)
+                        
+                        collected_content[msg_type].append(content) if msg_type in collected_content else None
                         yield f"data: {json.dumps({'type': msg_type, 'content': content})}\n\n"
                     continue
 

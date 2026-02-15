@@ -40,9 +40,6 @@ class ApiService {
   }
 
   // --- 2. Chat Agent ---
-  // Returns a Stream of text chunks (simulating the streaming response)
-  // --- 2. Chat Agent ---
-  // Returns a Stream of text chunks (simulating the streaming response)
   // Returns a Stream of dynamic (String for text, Map for interrupt)
   Stream<dynamic> sendChat(String text, List<Message> history,
       {required String threadId,
@@ -104,6 +101,10 @@ class ApiService {
               final content = json['content'];
 
               print("DEBUG: Type: $type, Content Type: ${content.runtimeType}");
+
+              if (type == 'debug') {
+                continue;
+              }
 
               if (type == 'text') {
                 if (content is String) {
