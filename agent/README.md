@@ -22,7 +22,7 @@ LLM_MODEL_DIAGNOSIS=medgemma-1.5:4b
 
 | Workflow for MedGemma1.5:4b | Diagnosis Subgraph |
 |-----------------------------|--------------------|
-|![ex-graph-for-medgemma4b](./assets/images/ex-graph-medgemma-4b.png) | ![ex-diagnosis-subgraph](./assets/images/ex-diagnosis-subgraph.png)|
+|![ex-graph-for-medgemma4b](./assets/images/ex-graph-medgemma-4b.png) | ![ex-diagnosis-subgraph](./assets/images/ex-diagnosis_subgraph.png)|
 
 ### 2. `med_gemma_27b` (High Accuracy)
 Optimized for deep medical reasoning and higher accuracy. Requires significantly more VRAM.

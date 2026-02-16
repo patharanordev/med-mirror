@@ -8,7 +8,8 @@ from app.workflow.med_gemma_4b.nodes.routing_node import RoutingNode
 from app.workflow.med_gemma_4b.nodes.general_chat_node import GeneralChatNode
 from app.workflow.med_gemma_4b.nodes.shopping_search_node import ShoppingSearchNode
 from app.workflow.med_gemma_4b.nodes.explain_node import ExplainNode
-from app.workflow.med_gemma_4b.nodes.diagnosis.graph import build_diagnosis_subgraph
+# from app.workflow.med_gemma_4b.nodes.diagnosis.graph import build_diagnosis_subgraph
+from app.workflow.diagnosis_4b.graph import build_diagnosis_subgraph
 
 def build_graph(llm, llm_diagnosis, checkpointer, tavily_tool=None):
     # Initialize Nodes
