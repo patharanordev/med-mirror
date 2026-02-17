@@ -4,11 +4,16 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from app.core.models import AgentState
 from langgraph.types import interrupt
+from app.core.models import PatientInfo
 import json
 
 class AskerNode:
     def __init__(self, llm):
         self.llm = llm # Expected: gemma3n:e4b
+        self.field_guidance = {
+            name: field.field_info.description 
+            for name, field in PatientInfo.__fields__.items()
+        }
         
     async def __call__(self, state: AgentState, config: RunnableConfig):
         print("--- DIAGNOSIS 4B: ASKER NODE ---")
@@ -16,9 +21,8 @@ class AskerNode:
         patient_info_dict = state.get("patient_info") or {}
         current_missing = state.get("missing_keys", [])
         
-        if not current_missing:
-            # Should not happen if routed correctly, but safe fallback
-            return {}
+        if len(current_missing) == 0:
+            return {"missing_keys": []}
             
         target_key = current_missing[0]
         print(f"DEBUG: Asking for '{target_key}'...")
@@ -46,7 +50,8 @@ class AskerNode:
 
     async def generate_question(self, extracted_data, missing_keys, target_key, chat_history, language):
         lang_instruction = f"Language: {language}. YOU MUST REPLY IN {language} ONLY."
-        
+        specific_hint = self.field_guidance.get(target_key, "Ask about this medical detail.")
+
         system_prompt = """
         **Role:** Empathetic Medical Screener (Gemma 3)
         **Language Directive:** {lang_instruction}
@@ -57,14 +62,21 @@ class AskerNode:
 
         **Task:**
         1. Look at the target missing key: '{target_key}'.
-        2. Ask **ONE** short, natural question to fill that missing gap.
+        2. Ask **ONE** short, natural and friendly question to fill that missing gap.
+        3. Specific Hint: {specific_hint}
 
         **Constraints:**
         - Maximum 15 words.
-        - Do NOT repeat or acknowledge the user's previous answer. Just ask the question directly.
+        - NEGATIVE CONSTRAINT: NEVER repeat or acknowledge the user's previous answer.
+        - NEGATIVE CONSTRAINT: Do NOT start with "Okay", "I understand", "Got it".
+        - NEGATIVE CONSTRAINT: Do NOT say "Thank you" or any closing statement.
+        - CRITICAL: You MUST end with a question mark (?).
+        - CRITICAL: You MUST ask a question related to '{target_key}'.
+        - Start the question IMMEDIATELY.
         - No "Robot Talk".
+        - Direct and warm tone.
         - Do NOT provide translations in brackets.
-        - Style: Conversational bridge.
+        - Style: Concise and Smart.
         """
         
         prompt = ChatPromptTemplate.from_messages([
@@ -79,7 +91,8 @@ class AskerNode:
             "missing_keys": missing_keys,
             "target_key": target_key,
             "chat_history": chat_history,
-            "lang_instruction": lang_instruction
+            "lang_instruction": lang_instruction,
+            "specific_hint": specific_hint
         })
         
         return res.content

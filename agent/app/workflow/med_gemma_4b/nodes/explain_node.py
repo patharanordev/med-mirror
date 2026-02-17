@@ -11,28 +11,25 @@ class ExplainNode:
     async def __call__(self, state: AgentState, config: RunnableConfig):
         print("--- EXPLAIN NODE ---")
         
-        diagnosis = state.get("diagnosis", "Unclear Condition")
-        is_critical = state.get("is_critical", False)
-        diffs = state.get("differential_diagnosis", [])
-        thought_process = state.get("diagnosis_thought_process", "No detailed reasoning available.")
+        # Now using raw text diagnosis
+        diagnosis_text = state.get("definite_diagnosis", "No diagnosis available.")
         
         system_msg = settings.get_system_prompt() + f"""
         
         TASK: Explain the diagnosis to the patient.
         
-        Doctor's Internal Reasoning:
-        {thought_process}
-        
-        Dataset:
-        - Diagnosis: {diagnosis}
-        - Critical: {is_critical}
-        - Possibilities: {diffs}
+        The Dermatologist AI has provided this diagnosis:
+        <DiagnosisResults>
+        {diagnosis_text}
+        </DiagnosisResults>
         
         Guidelines:
-        1. If Critical: WARN user to see a doctor immediately. Be serious but calm.
-        2. If Not Critical: Give a friendly explanation. Suggest general care 1-2 bullet points.
-        3. Style: Concise, Smart, Witty (if not critical).
-        4. Length: 2-3 sentences max.
+        1. Summarize the diagnosis for the patient.
+        2. Be empathetic and clear.
+        3. If the diagnosis mentions critical conditions, WARN the user to see a doctor.
+        4. If not critical, provide self-care advice and do NOT recommend a doctor unless necessary.
+        5. Style: Concise, Smart, Witty (if appropriate).
+        6. Length: 2-3 sentences max.
         """
         
         prompt = ChatPromptTemplate.from_messages([

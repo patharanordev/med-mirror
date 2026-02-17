@@ -9,13 +9,13 @@ import json
 class EvaluationNode:
     def __init__(self, llm):
         self.llm = llm  # Expected: gemma3n:e4b
+        self.valid_keys = list(PatientInfo.__fields__.keys())
         
     async def __call__(self, state: AgentState, config: RunnableConfig):
         print("--- DIAGNOSIS 4B: EVALUATION NODE ---")
         
         # 1. Initialize / Load State
         patient_info_dict = state.get("patient_info") or {}
-        missing_keys = state.get("missing_keys")
         
         # Extract if strictly necessary (last msg is Human)
         # We only extract if the last message is from Human (answer to a question or initial input)
@@ -27,18 +27,23 @@ class EvaluationNode:
              if extracted:
                 print(f"DEBUG: Extracted: {extracted}")
                 # Update extraction results
-                patient_info_dict.update(extracted)
+                cleaned_extracted = {k: v for k, v in extracted.items() if k in self.valid_keys}
+                patient_info_dict.update(cleaned_extracted)
         
         # 2. Recalculate Missing Keys
-        # We define the required keys based on PatientInfo fields
-        required_keys = PatientInfo.__fields__.keys()
-        
         current_missing = []
-        for k in required_keys:
+        for k in self.valid_keys:
             val = patient_info_dict.get(k)
             # consider missing if None or empty string or "Unknown" / "None"
-            if not val or val in ["", "None", "Unknown"]:
+            if val is None or str(val).strip() == "__MISSING__":
                 current_missing.append(k)
+        
+        if len(current_missing) == 0:
+            return {
+                "patient_info": state["patient_info"],
+                "missing_keys": current_missing,
+                "context": state["context"]
+            }
         
         # Update State
         state["patient_info"] = patient_info_dict
@@ -54,21 +59,29 @@ class EvaluationNode:
         }
 
     async def extract_info(self, chat_history, current_data):
+        keys_string = ", ".join(self.valid_keys)
         system_prompt = """You are a medical data extractor. 
         Analyze the conversation and extract patient information into JSON format.
         
         CRITICAL INSTRUCTION:
-        - You MUST look at the *previous question* from the AI to understand the user's answer.
-        - If the AI asked "When did it start?" and the user says "2 years", extract "2 years" as 'onset_and_duration'.
-        - If the AI asked "Where is it?" and user says "Face", extract "Face" as 'location_and_spread'.
-        
+        - CONTEXT AWARENESS: Always look at the AI's last question to understand the User's reply.
+        - NEGATIVE ANSWERS: If the user explicitly says "No", "None", "Don't know", or "Not sure" (ไม่มี, ไม่รู้, ไม่แน่ใจ), you MUST fill the field with "None" or "Unknown"(for not sure) instead of leaving it null.
+        - NO HALLUCINATION: Use ONLY the keys provided in the schema. Never invent new keys.
+        - DEDUPLICATION: If information is already present in 'current_data', do not change it unless the user provides a direct update.
+
         Update the current knowledge. Only fields that are explicitly mentioned or implied by the answer to the last question should be updated.
-        If a field is not mentioned, do NOT include it in the JSON (or keep as null).
+        If a field is not mentioned both current conversation and chat history, keep as "__MISSING__".
+
+        <ChatHistory>
+        {chat_history}
+        </ChatHistory>
+
+        <AllowedKeys>
+        [{keys_string}]
+        </AllowedKeys>
         
-        Current Knowledge: {current_data}
-        
-        Output Schema:
-        {format_instructions}
+        <CurrentKnowledge>{current_data}</CurrentKnowledge>
+        <OutputSchema>{format_instructions}</OutputSchema>
         """
         
         parser = JsonOutputParser(pydantic_object=PatientInfo)
@@ -84,7 +97,8 @@ class EvaluationNode:
             res = await chain.ainvoke({
                 "chat_history": chat_history, 
                 "current_data": json.dumps(current_data, ensure_ascii=False),
-                "format_instructions": parser.get_format_instructions()
+                "format_instructions": parser.get_format_instructions(),
+                "keys_string": keys_string
             })
             return res
         except Exception as e:
@@ -94,6 +108,6 @@ class EvaluationNode:
     def _format_patient_info(self, info):
         lines = []
         for k, v in info.items():
-            if v and v not in ["None", "Unknown"]:
+            if v and v not in ["", "__MISSING__"]:
                 lines.append(f"- {k}: {v}")
         return "\n".join(lines)

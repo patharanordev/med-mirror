@@ -19,9 +19,7 @@ class AgentState(TypedDict):
     image_url: Optional[str]
     
     # Diagnosis State
-    diagnosis_progress: Optional[List[str]] # Log of reasoning
-    diagnosis_thought_process: Optional[str] # Raw thought from diagnosis node
-    differential_diagnosis: Optional[List[str]]
+    definite_diagnosis: Optional[str] # Raw text diagnosis
     diagnostic_question: Optional[str]
     is_critical: Optional[bool]
     diagnosis_confidence: Optional[float]
@@ -76,10 +74,10 @@ class MedicalExtraction(BaseModelV1):
 
 # --- Diagnosis Subgraph Models ---
 class PatientInfo(BaseModelV1):
-    onset_and_duration: Optional[str] = FieldV1(None, description="Time duration (onset) and how long it has been.")
-    location_and_spread: Optional[str] = FieldV1(None, description="Location of symptoms and if it spreads.")
-    associated_symptoms: Optional[str] = FieldV1(None, description="Associated symptoms like itching, pain, bleeding.")
-    medical_background: Optional[str] = FieldV1(None, description="History of similar conditions or underlying diseases.")
-    triggers: Optional[str] = FieldV1(None, description="Potential triggers (new products, activities, environment).")
-    diet_history: Optional[str] = FieldV1(None, description="Recent diet changes or relevant food intake.")
-    lifestyle_and_sleep: Optional[str] = FieldV1(None, description="Sleep patterns, stress, lifestyle factors.")
+    duration: str = FieldV1(default="__MISSING__", title="Duration", description="Time duration (onset) and how long it has been.")
+    location_and_spread: str = FieldV1(default="__MISSING__", title="Location and Spread", description="Location of symptoms and if it spreads.")
+    associated_symptoms: str = FieldV1(default="__MISSING__", title="Associated Symptoms", description="Associated symptoms like itching, pain, bleeding.")
+    medical_background: str = FieldV1(default="__MISSING__", title="Medical Background", description="History of similar conditions or underlying diseases.")
+    aggravating_factors: str = FieldV1(default="__MISSING__", title="Aggravating Factors", description="Factors that precipitate or aggravate the condition (e.g., dust, food, stress, specific activities).")
+    diet_history: str = FieldV1(default="__MISSING__", title="Diet History", description="Recent diet changes or relevant food intake.")
+    lifestyle_and_sleep: str = FieldV1(default="__MISSING__", title="Lifestyle and Sleep", description="Sleep patterns, stress, lifestyle factors.")

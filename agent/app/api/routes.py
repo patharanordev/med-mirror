@@ -68,22 +68,39 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
     messages.append(HumanMessage(content=request.message))
     
     # 2. Prepare Graph Input
-    inputs = {
-        "messages": messages,
-        "context": request.context,
-        "image_url": request.image_url
+    # Check if state exists for this thread
+    app_graph = agent_service.get_graph()
+    config = {
+        "configurable": {
+            "thread_id": thread_id,
+            "run_id": str(uuid.uuid4())
+        }
     }
+
+    # Fetch current state
+    current_state = await app_graph.aget_state(config)
+    state_exists = bool(current_state.values)
+
+    if state_exists:
+        logger.info(f"CHAT: State exists for {thread_id}. Ignoring client history to prevent duplication.")
+        # Only pass the new message
+        inputs = {
+            "messages": [HumanMessage(content=request.message)],
+            "context": request.context,
+            "image_url": request.image_url
+        }
+    else:
+        logger.info(f"CHAT: No state for {thread_id}. Hydrating from client history.")
+        inputs = {
+            "messages": messages, # Full history + current message
+            "context": request.context,
+            "image_url": request.image_url
+        }
 
     # 3. Stream Generator
     async def event_generator():
         try:
-            app_graph = agent_service.get_graph()
-            config = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "run_id": str(uuid.uuid4())
-                }
-            }
+            # app_graph and config are already defined in outer scope
             
             logger.info(f"CHAT: Starting astream for thread_id={thread_id}")
             
