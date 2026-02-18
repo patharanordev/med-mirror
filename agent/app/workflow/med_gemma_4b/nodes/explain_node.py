@@ -13,31 +13,37 @@ class ExplainNode:
         
         # Now using raw text diagnosis
         diagnosis_text = state.get("definite_diagnosis", "No diagnosis available.")
+        user_language = state.get("language", "English")
         
-        system_msg = settings.get_system_prompt() + f"""
+        system_msg = f"""
         
         TASK: Explain the diagnosis to the patient.
         
-        The Dermatologist AI has provided this diagnosis:
-        <DiagnosisResults>
+        Definite diagnosis:
+        <DefiniteDiagnosis>
         {diagnosis_text}
-        </DiagnosisResults>
+        </DefiniteDiagnosis>
         
         Guidelines:
-        1. Summarize the diagnosis for the patient.
-        2. Be empathetic and clear.
-        3. If the diagnosis mentions critical conditions, WARN the user to see a doctor.
-        4. If not critical, provide self-care advice and do NOT recommend a doctor unless necessary.
-        5. Style: Concise, Smart, Witty (if appropriate).
-        6. Length: 2-3 sentences max.
+        1. Language: Answer in {user_language}.
+        2. Style: DIRECT, SMART, CONCISE.
+           - NO greetings (e.g., "Hello", "How are you").
+           - NO questions (e.g., "Do you have allergies?").
+           - Start directly with the explanation.
+        3. Content:
+           - Explain the likely cause clearly.
+           - Give specific, actionable advice (e.g., "Apply cool compress," "Avoid spicy food").
+        4. Tone: Professional but approachable.
+        5. Length: Keep it short (2-4 sentences). 
         """
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
-            MessagesPlaceholder("messages")
         ])
         
-        inputs = {"messages": state['messages'],"context": state.get("context", "")}
+        inputs = {
+            "context": state.get("context", ""),
+        }
         
         try:
             chain = (prompt | self.llm).with_config({"run_name": "ExplainChain"})

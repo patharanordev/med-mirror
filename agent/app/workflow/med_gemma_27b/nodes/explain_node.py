@@ -15,7 +15,7 @@ class ExplainNode:
         is_critical = state.get("is_critical", False)
         diffs = state.get("differential_diagnosis", [])
         
-        system_msg = settings.get_system_prompt() + f"""
+        system_msg = f"""
         
         TASK: Explain the diagnosis to the patient.
         Dataset:

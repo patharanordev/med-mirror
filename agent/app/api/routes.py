@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.core.config import settings
-from app.core.models import ChatRequest
+from app.core.models import ChatRequest, PatientInfo
 from app.services.agent_graph import agent_service
 from app.services.stt_service import stt_service
 from langgraph.types import Command
@@ -106,7 +106,7 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
             
             # State tracking
             is_model_reasoning = False
-            collected_content = {"thinking": [], "plan": [], "text": []}
+            collected_content = {"thinking": [], "plan": [], "text": [], "decision": []}
 
             # Check for existing interrupts
             snapshot = await app_graph.aget_state(config)
@@ -143,9 +143,19 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                         # Default to 'text' (visible in chat)
                         msg_type = "text"
                         
+                        # Debug logging to identify node names and tags
+                        logger.info(f"CHAT MSG: Node={node_name}, Tags={metadata.get('tags')}")
+
                         # Nodes that should NOT appear in chat bubble
-                        if node_name in ["thinking", "diagnosis", "routing"]:
+                        if node_name in ["thinking", "routing", "definite_diagnosis", "diagnosis_process"]:
                             msg_type = "thinking"
+                        
+                        # Check tags for definite_diagnosis (since it's in a subgraph)
+                        tags = metadata.get("tags", [])
+                        if "definite_diagnosis" in tags:
+                            msg_type = "thinking"
+                        elif node_name in ["asker", "evaluation"]:
+                            msg_type = "decision"
                             
                         # Also check for reasoning tags (DeepSeek style) just in case
                         if "<think>" in content or "<unused94>" in content:
@@ -160,6 +170,7 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                             is_model_reasoning = False
                         
                         collected_content[msg_type].append(content) if msg_type in collected_content else None
+                        print(f"CHAT: {msg_type}: {content}")
                         yield f"data: {json.dumps({'type': msg_type, 'content': content})}\n\n"
                     continue
 
@@ -201,9 +212,11 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                              data_src = output.dict()
                         
                         if isinstance(data_src, dict):
-                            for key in ["body_part", "duration", "symptoms", "allergies"]:
-                                if data_src.get(key):
-                                    updates[key] = data_src[key]
+                            # Use PatientInfo fields dynamically
+                            for key in PatientInfo.__fields__.keys():
+                                val = data_src.get(key)
+                                if val and val != "__MISSING__":
+                                    updates[key] = val
 
                         if updates:
                             yield f"data: {json.dumps({'type': 'profile_update', 'content': updates})}\n\n"
@@ -219,7 +232,8 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
             debug_payload = {
                 "thinking": "".join(collected_content["thinking"]),
                 "plan": ", ".join(collected_content["plan"]),
-                "text": "".join(collected_content["text"])
+                "text": "".join(collected_content["text"]),
+                "decision": "".join(collected_content["decision"])
             }
             yield f"data: {json.dumps({'type': 'debug', 'content': json.dumps(debug_payload)})}\n\n"
             yield "data: [DONE]\n\n"

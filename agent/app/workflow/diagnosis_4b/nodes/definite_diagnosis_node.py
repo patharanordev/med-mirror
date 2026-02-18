@@ -49,7 +49,16 @@ class DefiniteDiagnosisNode:
 
         try:
             chain = prompt | self.llm
-            msg = await chain.ainvoke(inputs, config=config)
+            
+            # Explicitly drop callbacks to prevent streaming tokens to the frontend
+            config_silent = config.copy()
+            if "callbacks" in config_silent:
+                del config_silent["callbacks"]
+                
+             # Add tag just in case for other tools
+            config_silent["tags"] = ["definite_diagnosis"]
+            
+            msg = await chain.ainvoke(inputs, config=config_silent)
             raw_content = msg.content
             
             # Simply store the raw content as the definite diagnosis

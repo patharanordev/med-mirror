@@ -119,7 +119,12 @@ class ApiService {
                     'run_id': content['run_id']
                   };
                 } else if (content is String) {
-                  yield content;
+                  // yield content;
+                  yield {
+                    'type': 'interrupt',
+                    'question': content,
+                    'run_id': "",
+                  };
                 } else {
                   print(
                       "DEBUG: Content is NOT Map or String: ${content.runtimeType} -> $content");

@@ -106,21 +106,38 @@ class ChatPanelState extends State<ChatPanel> {
       await for (final chunk in stream) {
         if (chunk is String) {
           fullContent += chunk;
+
+          if (mounted) {
+            setState(() {
+              _messages.last = Message(role: 'assistant', content: fullContent);
+            });
+            _scrollToBottom();
+          }
         } else if (chunk is Map) {
-          // Handle Interrupt Map
           if (chunk['type'] == 'interrupt') {
             final question = chunk['question'] ?? "";
             _currentRunId = chunk['run_id']; // Store new runId for NEXT answer
-            fullContent += question;
+
+            // // Create a NEW message bubble for the interrupt/question
+            // if (mounted) {
+            //   setState(() {
+            //     // If the explanation was empty, this might replace it visually if we reused the same index,
+            //     // but we want a distinct new bubble.
+            //     _messages.add(Message(role: 'assistant', content: ""));
+            //   });
+            // }
+
+            // fullContent = question;
+
+            if (mounted) {
+              setState(() {
+                _messages.last = Message(role: 'assistant', content: question);
+              });
+              _scrollToBottom();
+            }
+            fullContent = "";
             print("ChatPanel: Received Interrupt with runId: $_currentRunId");
           }
-        }
-
-        if (mounted) {
-          setState(() {
-            _messages.last = Message(role: 'assistant', content: fullContent);
-          });
-          _scrollToBottom();
         }
       }
     } catch (e) {

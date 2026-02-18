@@ -1,12 +1,9 @@
-from typing import Dict, Any, List, Literal, Optional
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from app.core.config import settings
-from app.core.models import AgentState
 import os
 import asyncio
-import importlib
 
 class AgentService:
     def __init__(self):
@@ -23,7 +20,8 @@ class AgentService:
             api_key=settings.LLM_API_KEY,
             model=settings.LLM_MODEL_DIAGNOSIS,
             temperature=0,
-            streaming=True
+            streaming=True,
+            max_tokens=2048
         )
         
         self.tavily_tool = None

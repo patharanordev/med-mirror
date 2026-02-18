@@ -48,34 +48,21 @@ def build_graph(llm, llm_diagnosis, checkpointer, tavily_tool=None):
             "shopping_search": "shopping_search"
         })
     
-    def route_diagnosis_process(state):
-        # Check if diagnosis is complete (ready to explain)
-        # The subgraph updates state. If we have a final diagnosis or ready to explain:
-        if state.get("next_step") == "explain" and state.get("diagnosis"):
-             return "explain"
-        # If we have diagnosis_complete=True but next_step might be something else?
-        # DiagnosisNode sets next_step="explain" when done.
-        # But wait, if AskerNode returns end execution (waiting for user), does it hit this edge?
-        # Yes. If AskerNode returns END inside subgraph, subgraph finishes.
-        # State has 'messages' with question.
-        # diagnosis_complete needs to be checked.
-        
-        # If we are waiting for user input (messages[-1] is AIMessage):
-        # We should logically END.
-        # But how do we distinguish "Final Explain" vs "Ask Question"?
-        # 1. Ask Question: messages[-1] is AI question. next_step != explain.
-        # 2. Explain: next_step == explain.
-        
-        if state.get("next_step") == "explain":
-            return "explain"
-            
-        return END
 
-    workflow.add_conditional_edges("diagnosis_process", route_diagnosis_process, {
-        "explain": "explain",
-        END: END
-    })
+
+    workflow.add_edge("diagnosis_process", "explain")
+    # def route_diagnosis_process(state):
+    #     if state.get("next_step") == "explain":
+    #         return "explain"
+    #     return END
+
+    # workflow.add_conditional_edges("diagnosis_process", route_diagnosis_process, {
+    #     "explain": "explain",
+    #     END: END
+    # })
     
+
+
     workflow.add_edge("general_chat", END)
     workflow.add_edge("explain", END)
     workflow.add_edge("shopping_search", END)
