@@ -32,6 +32,10 @@ class AskerNode:
         # Generate Question
         formatted_question = await self.generate_question(patient_info_dict, current_missing, target_key, state["messages"], language)
         
+        if not formatted_question or not formatted_question.strip():
+            print("WARNING: AskerNode generated empty question. Returning to graph for retry (skipping interrupt).")
+            return {}
+        
         # --- HITL: Interrupt to get user answer ---
         # We ask the question via interrupt. The execution pauses here.
         user_answer = interrupt(formatted_question)
@@ -64,12 +68,13 @@ class AskerNode:
 
 **Task:**
 1. Look at the target missing key: '{target_key}'.
-2. Ask **ONE** short, natural, and comprehensive question to fill that missing gap.
+2. Ask **ONE** short, natural, and open-ended question to fill that missing gap.
 3. Ensure the question helps narrow down the possibilities.
 4. Specific Hint: {specific_hint}
 
 **Constraints:**
 - Maximum 15 words.
+- NEGATIVE CONSTRAINT: Do NOT ask Yes/No questions. Ask open-ended questions (e.g. "How long...", "Describe...", "Where...").
 - NEGATIVE CONSTRAINT: NEVER repeat or acknowledge the user's previous answer.
 - NEGATIVE CONSTRAINT: Do NOT start with "Okay", "I understand", "Got it".
 - NEGATIVE CONSTRAINT: Do NOT say "Thank you" or any closing statement.
@@ -81,6 +86,7 @@ class AskerNode:
 - Do NOT provide translations in brackets.
 - Style: Concise and Smart.
 """
+
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
