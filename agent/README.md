@@ -70,3 +70,19 @@ LLM_MODEL_DIAGNOSIS=medgemma:27b
 ## Docker
 
 The provided Dockerfiles (`Dockerfile.win`, `Dockerfile.mac`) are already configured to use Python 3.12.
+
+## Shopping Intent Detection
+
+The agent now features smart **Shopping Intent Detection** powered by the LLM (`gemma3n:e4b` or routing model).
+
+![Shopping Intent Detection](./assets/images/user-shopping-intent.jpg)
+
+### How it works:
+1.  **Thinking Node**: Detects if the user explicitly asks for products, medicine, or treatment (e.g., "I need a cream for this rash").
+2.  **Evaluation Node**: Continuously monitors the diagnosis interview for shopping intent.
+3.  **State Update**: Sets `shopping_intent=True` in the `AgentState`.
+4.  **Automatic Routing**:
+    -   If `shopping_intent` is **True**, the agent automatically transitions to **Shopping Search** after the diagnosis/explanation is complete.
+    -   If **False**, the session ends normally.
+
+This replaces the previous "Human-in-the-Loop" question node, providing a smoother and faster user experience.

@@ -64,7 +64,19 @@ def build_graph(llm, llm_diagnosis, checkpointer, tavily_tool=None):
 
 
     workflow.add_edge("general_chat", END)
-    workflow.add_edge("explain", END)
+
+    
+    # Conditional routing for shopping intent
+    def route_explain(state):
+        if state.get("shopping_intent"):
+            return "shopping_search"
+        return END
+
+    workflow.add_conditional_edges("explain", route_explain, {
+        "shopping_search": "shopping_search",
+        END: END
+    })
+    
     workflow.add_edge("shopping_search", END)
 
     return workflow.compile(checkpointer=checkpointer)

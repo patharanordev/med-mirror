@@ -9,6 +9,7 @@ class ThinkingResultSimple(BaseModelV1):
     analysis: str = FieldV1(description="Brief analysis of intent.")
     next_step: Literal['general_chat', 'diagnosis', 'shopping_search']
     language: str = FieldV1(description="Detected language of the user (e.g., 'English', 'Thai', 'Japanese'). Default to 'English'.")
+    shopping_intent: bool = FieldV1(default=False, description="True if user explicitly asks for products, medicine, cream, or treatment.")
 
 class ThinkingNode:
     def __init__(self, llm):
@@ -29,7 +30,8 @@ class ThinkingNode:
         Task: 
         1. Analyze the user's input/intent.
         2. Detect the language of the user (e.g., Thai, English, Chinese, etc.).
-        3. Explicitly state the reasoning for choosing the next step.
+        3. Detect 'shopping_intent': Set to True if user asks for medicine/products/cream, even if routing to 'diagnosis'.
+        4. Explicitly state the reasoning for choosing the next step.
         
         Context: {context}
         """
@@ -60,7 +62,8 @@ class ThinkingNode:
             return {
                 "thinking_process": result_dict.get("analysis", ""),
                 "next_step": result_dict.get("next_step", "general_chat"),
-                "language": result_dict.get("language", "English")
+                "language": result_dict.get("language", "English"),
+                "shopping_intent": result_dict.get("shopping_intent", False)
             }
         except Exception as e:
             # Fallback logic
