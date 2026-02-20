@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../chat/controllers/voice_controller.dart';
-import '../../../core/state/app_state.dart';
-import '../../../core/services/api_service.dart';
 import '../widgets/camera_overlay_view.dart';
 import '../widgets/badge.dart';
 import '../../chat/widgets/chat_panel.dart';

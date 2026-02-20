@@ -27,7 +27,7 @@ class AudioWave extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: List.generate(barCount, (index) {
               // Create wave pattern: center bars higher, edge bars lower
-              final centerIndex = barCount / 2;
+              const centerIndex = barCount / 2;
               final distanceFromCenter = (index - centerIndex).abs();
               final waveFactor = 1.0 - (distanceFromCenter / centerIndex) * 0.4;
 

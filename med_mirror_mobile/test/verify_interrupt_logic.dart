@@ -8,7 +8,7 @@ import 'package:med_mirror_mobile/features/chat/models/message.dart';
 
 void main() {
   test('ApiService parses interrupt correctly', () async {
-    final mockResponse = 'data: {"type": "text", "content": "Hello"}\n\n'
+    const mockResponse = 'data: {"type": "text", "content": "Hello"}\n\n'
         'data: {"type": "interrupt", "content": {"question": "Check?", "run_id": "123"}}\n\n'
         'data: [DONE]\n\n';
 

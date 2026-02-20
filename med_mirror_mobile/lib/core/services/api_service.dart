@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:image/image.dart'
-    as img; // For lightweight processing if needed
+// For lightweight processing if needed
 import '../../features/chat/models/message.dart';
 
 class ApiService {

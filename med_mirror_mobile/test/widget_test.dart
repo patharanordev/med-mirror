@@ -45,7 +45,7 @@ void main() {
     when(() => mockCameraPlatform.availableCameras())
         .thenAnswer((_) async => []);
     when(() => mockCameraPlatform.onDeviceOrientationChanged())
-        .thenAnswer((_) => Stream.empty());
+        .thenAnswer((_) => const Stream.empty());
 
     // Stub VoiceController ChangeNotifier methods
     when(() => mockVoiceController.addListener(any())).thenReturn(null);
