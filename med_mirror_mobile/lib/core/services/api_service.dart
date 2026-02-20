@@ -108,6 +108,14 @@ class ApiService {
                 if (content is String) {
                   yield content;
                 }
+              } else if (type == 'search_result') {
+                // content is a List of search result dicts
+                if (content is List) {
+                  yield {
+                    'type': 'search_result',
+                    'items': content,
+                  };
+                }
               } else if (type == 'interrupt') {
                 if (content is Map) {
                   print("DEBUG: Yielding Interrupt Map");

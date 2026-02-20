@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/message.dart';
+import '../models/search_result_item.dart';
+import '../widgets/search_result_carousel.dart';
 import '../../../core/state/app_state.dart';
 import '../../../core/services/api_service.dart';
 import 'package:uuid/uuid.dart';
@@ -112,20 +114,11 @@ class ChatPanelState extends State<ChatPanel> {
             _scrollToBottom();
           }
         } else if (chunk is Map) {
-          if (chunk['type'] == 'interrupt') {
+          final chunkType = chunk['type'];
+
+          if (chunkType == 'interrupt') {
             final question = chunk['question'] ?? "";
             _currentRunId = chunk['run_id']; // Store new runId for NEXT answer
-
-            // // Create a NEW message bubble for the interrupt/question
-            // if (mounted) {
-            //   setState(() {
-            //     // If the explanation was empty, this might replace it visually if we reused the same index,
-            //     // but we want a distinct new bubble.
-            //     _messages.add(Message(role: 'assistant', content: ""));
-            //   });
-            // }
-
-            // fullContent = question;
 
             if (mounted) {
               setState(() {
@@ -135,6 +128,15 @@ class ChatPanelState extends State<ChatPanel> {
             }
             fullContent = "";
             print("ChatPanel: Received Interrupt with runId: $_currentRunId");
+          } else if (chunkType == 'search_result') {
+            final rawItems = chunk['items'] as List? ?? [];
+            final items = rawItems
+                .whereType<Map<String, dynamic>>()
+                .map(SearchResultItem.fromJson)
+                .toList();
+            if (mounted && items.isNotEmpty) {
+              _showSearchResults(items);
+            }
           }
         }
       }
@@ -164,21 +166,32 @@ class ChatPanelState extends State<ChatPanel> {
     });
   }
 
+  /// Shows the search result carousel as a centered overlay dialog.
+  /// Uses showDialog so the carousel manages its own overlay layer —
+  /// no setState needed in ChatPanel, preventing a full chat list rebuild.
+  void _showSearchResults(List<SearchResultItem> items) {
+    showDialog<void>(
+      context: context,
+      barrierColor: const Color(0x80000000), // 50% black barrier
+      builder: (_) => SearchResultCarousel(items: items),
+    );
+  }
+
+  // Pre-computed colors — avoids allocating new Color/LinearGradient objects each build.
+  static const _gradientEnd = Color(0x99000000); // black 60% opacity
+  static const _gradientDecoration = BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Colors.transparent, _gradientEnd],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Container(
       // Width/Height controlled by parent Positioned
-      decoration: BoxDecoration(
-        color: Colors
-            .transparent, // Fully transparent as requested ("back ground transparent")
-        // Or if they wanted a very subtle gradient, we could add it, but "transparent" usually means see-through.
-        // Let's add a gradient to ensure text readability without blocking view.
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
-        ),
-      ),
+      decoration: _gradientDecoration,
       child: Column(
         children: [
           // Chat List
@@ -201,7 +214,7 @@ class ChatPanelState extends State<ChatPanel> {
                     decoration: BoxDecoration(
                       color: isUser
                           ? Colors.white24
-                          : Colors.blue.withOpacity(0.2),
+                          : const Color(0x330000FF), // blue ~20% opacity
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),

@@ -221,11 +221,16 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                         if updates:
                             yield f"data: {json.dumps({'type': 'profile_update', 'content': updates})}\n\n"
 
-                    # 3. Shopping Node - Tool Search Completion (Inferred)
+                    # 3. Shopping Node - Emit raw search results to client
                     if "shopping_search" in data:
-                        # If we get an update from shopping_search, it means the search/recommendation is done.
-                        # We can't easily see "start" of tool in this mode, but we can confirm completion.
-                         yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
+                        output = data["shopping_search"]
+                        results = []
+                        if isinstance(output, dict):
+                            results = output.get("search_results", [])
+                        if results:
+                            yield f"data: {json.dumps({'type': 'search_result', 'content': results})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
 
 
             # --- FINAL OUTPUT ---

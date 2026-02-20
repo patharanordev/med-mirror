@@ -37,6 +37,8 @@ class AgentState(TypedDict):
     
     # Shopping State
     shopping_interested: Optional[bool]
+    shopping_intent: Optional[bool]  # From ThinkingNode: True if user asks for products
+    search_results: Optional[List[dict]]  # Raw Tavily search results
 
     # Thinking / Planning State
     todo: Optional[List[str]]

@@ -11,8 +11,12 @@ class ShoppingSearchNode:
     async def __call__(self, state: AgentState, config: RunnableConfig):
         query = f"products for {state.get('symptoms', 'skin')} on {state.get('body_part', 'body')}"
         
+        raw_results = []
         if self.tavily_tool:
             results = await self.tavily_tool.ainvoke(query)
+            # Tavily returns a list of dicts with title, url, content, score
+            if isinstance(results, list):
+                raw_results = results
             content = str(results)
         else:
             content = "Search unavailable."
@@ -20,13 +24,17 @@ class ShoppingSearchNode:
         prompt = ChatPromptTemplate.from_messages([
             ("system", settings.get_system_prompt()),
             ("system", "Recommend products based on these search results. keep it concise (max 1-2 sentences with list of products)."),
-            ("user", content)
+            ("user", "{search_results}")
         ])
         
         inputs = {
             "context": state.get("context", "No context"),
+            "search_results": content,
         }
         
         chain = (prompt | self.llm).with_config({"run_name": "ShoppingSummarizeChain"})
         response = await chain.ainvoke(inputs, config=config)
-        return {"messages": [response]}
+        return {
+            "messages": [response],
+            "search_results": raw_results,
+        }
