@@ -22,19 +22,25 @@ class RoutingNode:
         thinking_process = state.get("thinking_process", "No detailed thought process available.")
 
         # System prompt explicitly asks to format the previous thought
-        system_msg = """You are a formatting assistant. 
-        Your job is to take the provided "Thinking Process" and structured it into a valid JSON decision.
-        
-        Routing Rules (reiterate for safety):
-        - 'general_chat': Greetings, small talk, jokes, or non-medical questions.
-        - 'diagnosis': User mentions a body part, symptom, condition, or problem.
-        - 'shopping_search': User explicitly asks to BUY products.
-        
-        Input Thought: {thinking_process}
-        
-        Output must be a valid JSON object matching the schema below.
-        {format_instructions}
-        """
+        system_msg = """<role>JSON Formatting Assistant</role>
+
+<goal>Take the provided ThinkingProcess and convert it into a valid JSON routing decision.</goal>
+
+<routing_rules>
+  - 'general_chat': Greetings, small talk, jokes, or non-medical questions.
+  - 'diagnosis': User mentions a body part, symptom, condition, or problem.
+  - 'shopping_search': User explicitly asks to BUY products.
+</routing_rules>
+
+<input>
+  <thinking_process>{thinking_process}</thinking_process>
+</input>
+
+<output_format priority="CRITICAL">
+  - Return ONLY a raw JSON object. No markdown, no explanation, no extra text.
+  - Must match the schema exactly:
+  {format_instructions}
+</output_format>"""
         
         prompt = ChatPromptTemplate.from_template(system_msg)
 

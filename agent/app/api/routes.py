@@ -154,7 +154,7 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                         tags = metadata.get("tags", [])
                         if "definite_diagnosis" in tags:
                             msg_type = "thinking"
-                        elif node_name in ["asker", "evaluation"]:
+                        elif node_name in ["asker", "evaluation", "ask_treatment"]:
                             msg_type = "decision"
                             
                         # Also check for reasoning tags (DeepSeek style) just in case

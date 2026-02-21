@@ -24,17 +24,21 @@ class AskerNode:
         if len(current_missing) == 0:
             return {"missing_keys": []}
             
-        target_key = current_missing[0]
-        print(f"DEBUG: Asking for '{target_key}'...")
+        target_keys = current_missing[:2] # Ask for up to 2 missing keys at a time
+        target_keys_str = ", ".join(target_keys)
+        print(f"DEBUG: Asking for '{target_keys_str}'...")
         
         language = state.get("language", "English")
         
         # Generate Question
-        formatted_question = await self.generate_question(patient_info_dict, current_missing, target_key, state["messages"], language)
+        formatted_question = await self.generate_question(patient_info_dict, current_missing, target_keys, state["messages"], language)
         
         if not formatted_question or not formatted_question.strip():
-            print("WARNING: AskerNode generated empty question. Returning to graph for retry (skipping interrupt).")
-            return {}
+            print(f"WARNING: AskerNode generated empty question for '{target_keys_str}'. Dropping keys to avoid loop.")
+            # Remove the problematic keys so evaluation can proceed without them
+            remaining = [k for k in current_missing if k not in target_keys]
+            return {"missing_keys": remaining}
+
         
         # --- HITL: Interrupt to get user answer ---
         # We ask the question via interrupt. The execution pauses here.
@@ -52,40 +56,47 @@ class AskerNode:
             ]
         }
 
-    async def generate_question(self, extracted_data, missing_keys, target_key, chat_history, language):
+    async def generate_question(self, extracted_data, missing_keys, target_keys, chat_history, language):
         lang_instruction = f"Language: {language}. YOU MUST REPLY IN {language} ONLY."
-        specific_hint = self.field_guidance.get(target_key, "Ask about this medical detail.")
+        
+        target_keys_str = ", ".join(target_keys)
+        specific_hints = [f"- {key}: {self.field_guidance.get(key, 'Ask about this medical detail.')}" for key in target_keys]
+        hints_str = "\n".join(specific_hints)
 
-        system_prompt = """
-**Role:** Empathetic Medical Screener (Gemma 3)
-**Language Directive:** {lang_instruction}
+        system_prompt = """<role>Empathetic Medical Screener</role>
+<language>{lang_instruction}</language>
 
-**Context:** 
-- Current Knowledge: {extracted_data}
-- Missing Information: {missing_keys}
+<context>
+  <current_knowledge>{extracted_data}</current_knowledge>
+  <missing_information>{missing_keys}</missing_information>
+</context>
 
-**Goal:** Help the doctor screen the patient's symptoms to scope down the diagnosis and reduce the doctor's burden. The question should cover all possibilities related to the missing information.
+<goal>Help the doctor screen the patient's symptoms to scope down the diagnosis and reduce the doctor's burden. The question should cover all possibilities related to the missing information efficiently.</goal>
 
-**Task:**
-1. Look at the target missing key: '{target_key}'.
-2. Ask **ONE** short, natural, and open-ended question to fill that missing gap.
-3. Ensure the question helps narrow down the possibilities.
-4. Specific Hint: {specific_hint}
+<task>
+  1. Look at the target missing keys: {target_keys}.
+  2. Ask ONE smart, natural, and open-ended question that seamlessly combines and asks for these missing gaps.
+  3. Ensure the question is easy for the patient to answer in one go without feeling overwhelmed.
+  4. Specific hints for target keys:
+  <hints>
+{hints_str}
+  </hints>
+</task>
 
-**Constraints:**
-- Maximum 15 words.
-- NEGATIVE CONSTRAINT: Do NOT ask Yes/No questions. Ask open-ended questions (e.g. "How long...", "Describe...", "Where...").
-- NEGATIVE CONSTRAINT: NEVER repeat or acknowledge the user's previous answer.
-- NEGATIVE CONSTRAINT: Do NOT start with "Okay", "I understand", "Got it".
-- NEGATIVE CONSTRAINT: Do NOT say "Thank you" or any closing statement.
-- CRITICAL: You MUST end with a question mark (?).
-- CRITICAL: You MUST ask a question related to '{target_key}'.
-- Start the question IMMEDIATELY.
-- No "Robot Talk".
-- Direct and warm tone.
-- Do NOT provide translations in brackets.
-- Style: Concise and Smart.
-"""
+<constraints>
+  - Maximum 30 words.
+  - NEGATIVE: Do NOT ask Yes/No questions. Ask open-ended questions (e.g. "How long...", "Describe...", "Where...").
+  - NEGATIVE: NEVER repeat or acknowledge the user's previous answer.
+  - NEGATIVE: Do NOT start with "Okay", "I understand", "Got it".
+  - NEGATIVE: Do NOT say "Thank you" or any closing statement.
+  - NEGATIVE: Do NOT provide translations in brackets.
+  - NEGATIVE: Do NOT make assumptions or inferences about the answer. Ask directly for the fact (e.g. ask "How many hours do you sleep?" NOT "You seem to sleep very little, right?").
+  - CRITICAL: You MUST end with a question mark (?).
+  - CRITICAL: You MUST ask a question related to: {target_keys}.
+  - Start the question IMMEDIATELY.
+  - No robot talk. Direct and warm tone.
+  - Style: Concise, connected, and smart.
+</constraints>"""
 
         
         prompt = ChatPromptTemplate.from_messages([
@@ -98,10 +109,10 @@ class AskerNode:
         res = await chain.ainvoke({
             "extracted_data": json.dumps(extracted_data, ensure_ascii=False),
             "missing_keys": missing_keys,
-            "target_key": target_key,
+            "target_keys": target_keys_str,
             "chat_history": chat_history,
             "lang_instruction": lang_instruction,
-            "specific_hint": specific_hint
+            "hints_str": hints_str
         })
         
         return res.content

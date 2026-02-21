@@ -18,30 +18,31 @@ class ThinkingNode:
     async def __call__(self, state: AgentState, config: RunnableConfig):
         print("--- THINKING NODE (4b - Lite) ---")
         
-        # 1. System Prompt for Analysis
-        system_msg = """You are the 'Brain' of MedMirror. 
-        Analyze the user's input to decide the next step and DETECT the language.
-        
-        Routing Rules:
-        - 'general_chat': Greetings, small talk, jokes, or non-medical questions.
-        - 'diagnosis': User mentions a body part, symptom, condition, or problem (e.g., "my face is red", "panda eyes"). Route here even if info is incomplete.
-        - 'shopping_search': User explicitly asks to BUY products or RECOMENDATIONS for products.
-        
-        Task: 
-        1. Analyze the user's input/intent.
-        2. Detect the language of the user (e.g., Thai, English, Chinese, etc.).
-        3. Detect 'shopping_intent': Set to True if user asks for medicine/products/cream, even if routing to 'diagnosis'.
-        4. Explicitly state the reasoning for choosing the next step.
-        
-        Context: {context}
-        """
-        
+        system_msg = """<role>MedMirror Brain — Intent Analyzer</role>
+
+<goal>Analyze the user's input to decide the next step, detect their language, and identify shopping intent.</goal>
+
+<routing_rules>
+  - 'general_chat': Greetings, small talk, jokes, or non-medical questions.
+  - 'diagnosis': User mentions a body part, symptom, condition, or problem (e.g., "my face is red", "panda eyes"). Route here even if info is incomplete.
+  - 'shopping_search': User explicitly asks to BUY products or requests product recommendations.
+</routing_rules>
+
+<task>
+  1. Analyze the user's message and intent.
+  2. Detect the user's language (e.g., Thai, English, Chinese, Japanese, etc.).
+  3. Detect 'shopping_intent': Set to True if user asks for medicine, products, cream, or treatment — even if routing to 'diagnosis'.
+  4. Briefly state the reasoning for the chosen next_step.
+</task>
+
+<context>{context}</context>"""
+
         from langchain_core.output_parsers import JsonOutputParser
         parser = JsonOutputParser(pydantic_object=ThinkingResultSimple)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
-            ("system", "Output JSON format: {format_instructions}"),
+            ("system", "<output_format priority=\"CRITICAL\">Return ONLY raw JSON. No markdown. Schema: {format_instructions}</output_format>"),
             MessagesPlaceholder("messages"),
         ])
 

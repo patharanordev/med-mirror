@@ -103,6 +103,10 @@ class ChatPanelState extends State<ChatPanel> {
       // Agent handles validation.
       _currentRunId = null;
 
+      // Holds an interrupt received mid-stream;
+      // flushed as a new bubble after streaming completes.
+      Map<String, dynamic>? pendingInterrupt;
+
       await for (final chunk in stream) {
         if (chunk is String) {
           fullContent += chunk;
@@ -118,16 +122,10 @@ class ChatPanelState extends State<ChatPanel> {
 
           if (chunkType == 'interrupt') {
             final question = chunk['question'] ?? "";
-            _currentRunId = chunk['run_id']; // Store new runId for NEXT answer
-
-            if (mounted) {
-              setState(() {
-                _messages.last = Message(role: 'assistant', content: question);
-              });
-              _scrollToBottom();
-            }
-            fullContent = "";
-            print("ChatPanel: Received Interrupt with runId: $_currentRunId");
+            _currentRunId = chunk['run_id'];
+            // Buffer the interrupt — do NOT touch the message list yet.
+            pendingInterrupt = {'question': question};
+            print("ChatPanel: Buffered interrupt (runId: $_currentRunId)");
           } else if (chunkType == 'search_result') {
             final rawItems = chunk['items'] as List? ?? [];
             final items = rawItems
@@ -140,6 +138,22 @@ class ChatPanelState extends State<ChatPanel> {
           }
         }
       }
+      // Stream done — finalize streaming bubble then flush any pending interrupt
+      if (mounted && pendingInterrupt != null) {
+        setState(() {
+          // Lock in whatever explain text was streamed
+          if (fullContent.isNotEmpty) {
+            _messages.last = Message(role: 'assistant', content: fullContent);
+          }
+          // Append interrupt question as a separate bubble
+          _messages.add(
+            Message(
+                role: 'assistant',
+                content: pendingInterrupt!['question'] as String),
+          );
+        });
+        _scrollToBottom();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -148,8 +162,16 @@ class ChatPanelState extends State<ChatPanel> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isTyping = false);
-        // Auto-restart handled by VoiceController now
+        setState(() {
+          // Clean up empty placeholder bubble if the turn produced no visible content
+          // (e.g. ask_treatment → END with no text streamed)
+          if (_messages.isNotEmpty &&
+              _messages.last.role == 'assistant' &&
+              _messages.last.content.isEmpty) {
+            _messages.removeLast();
+          }
+          _isTyping = false;
+        });
       }
     }
   }
@@ -202,7 +224,14 @@ class ChatPanelState extends State<ChatPanel> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
+                final isLast = index == _messages.length - 1;
                 final isUser = msg.role == 'user';
+
+                // Skip empty bubbles that aren't the active streaming placeholder
+                if (msg.content.isEmpty && !isLast) {
+                  return const SizedBox.shrink();
+                }
+
                 return Align(
                   alignment:
                       isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -213,7 +242,7 @@ class ChatPanelState extends State<ChatPanel> {
                     constraints: const BoxConstraints(maxWidth: 280),
                     decoration: BoxDecoration(
                       color: isUser
-                          ? Colors.white24
+                          ? const Color.fromARGB(30, 255, 255, 255)
                           : const Color(0x330000FF), // blue ~20% opacity
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
@@ -226,7 +255,7 @@ class ChatPanelState extends State<ChatPanel> {
                       border: Border.all(color: Colors.white10),
                     ),
                     child: Text(
-                      msg.content.isEmpty && index == _messages.length - 1
+                      msg.content.isEmpty && isLast
                           ? "Thinking..."
                           : msg.content,
                       style: const TextStyle(fontSize: 18),
@@ -244,6 +273,46 @@ class ChatPanelState extends State<ChatPanel> {
                 border: Border(top: BorderSide(color: Colors.white10))),
             child: Row(
               children: [
+                // 🧪 Mock search result trigger — simulates agent `search_result` stream chunk
+                Tooltip(
+                  message: 'Test: Show mock product recommendations',
+                  child: IconButton(
+                    key: const ValueKey('mock_search_trigger'),
+                    icon: const Text('🧪', style: TextStyle(fontSize: 18)),
+                    onPressed: () {
+                      // Mirrors the exact payload shape from the agent stream:
+                      // { "type": "search_result", "items": [...] }
+                      // Each item matches SearchResultItem.fromJson fields.
+                      final mockItems = [
+                        SearchResultItem.fromJson({
+                          'title':
+                              'Nourishing Body Care Products for All Skin | Biotherm US',
+                          'url': 'https://www.biotherm.com/bodycare.list',
+                          'content':
+                              'Nourish, hydrate and protect skin with our body care products, featuring moisturiser, lotion, body wash, fragrance and more. Powered by natural, science-backed ingredients including our signature Life Plankton™ water.',
+                          'score': 0.7817479,
+                        }),
+                        SearchResultItem.fromJson({
+                          'title':
+                              "Dermatologist's Favorite Body Skincare Products - YouTube",
+                          'url': 'https://www.youtube.com/watch?v=0qnpo3CcpnM',
+                          'content':
+                              "We often don't give the same attention to the skin on our body as we do to the skin on our face. Here are some of my favorite body care products from the perspective of a dermatologist.",
+                          'score': 0.7272211,
+                        }),
+                        SearchResultItem.fromJson({
+                          'title': 'Body Care Products | Ulta Beauty',
+                          'url': 'https://www.ulta.com/shop/body-care',
+                          'content':
+                              "Whether you're trying to take a relaxing bath or looking to pamper yourself, Ulta Beauty offers a variety of bath and body products. Find bath and shower gels, body moisturizers, self-tanners and more.",
+                          'score': 0.65676886,
+                        }),
+                      ];
+                      _showSearchResults(mockItems);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
                 Expanded(
                   child: TextField(
                     controller: _inputCtrl,

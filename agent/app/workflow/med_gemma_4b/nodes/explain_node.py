@@ -15,27 +15,32 @@ class ExplainNode:
         diagnosis_text = state.get("definite_diagnosis", "No diagnosis available.")
         user_language = state.get("language", "English")
         
-        system_msg = f"""
-        
-        TASK: Explain the diagnosis to the patient.
-        
-        Definite diagnosis:
-        <DefiniteDiagnosis>
-        {diagnosis_text}
-        </DefiniteDiagnosis>
-        
-        Guidelines:
-        1. Language: Answer in {user_language}.
-        2. Style: DIRECT, SMART, CONCISE.
-           - NO greetings (e.g., "Hello", "How are you").
-           - NO questions (e.g., "Do you have allergies?").
-           - Start directly with the explanation.
-        3. Content:
-           - Explain the likely cause clearly.
-           - Give specific, actionable advice (e.g., "Apply cool compress," "Avoid spicy food").
-        4. Tone: Professional but approachable.
-        5. Length: Keep it short (2-4 sentences). 
-        """
+        system_msg = f"""<role>Medical Explainer</role>
+<language>{user_language}</language>
+
+<goal>Explain the diagnosis clearly and directly to the patient.</goal>
+
+<diagnosis>
+{diagnosis_text}
+</diagnosis>
+
+<task>
+  1. Read the diagnosis above.
+  2. Explain the likely cause in simple, clear terms.
+  3. Give 1-2 specific, actionable self-care tips (e.g., "Apply cool compress", "Avoid spicy food").
+</task>
+
+<constraints>
+  - CRITICAL: Respond in {user_language} ONLY. Do NOT add translations in brackets.
+  - NEGATIVE: Do NOT greet the user (no "Hello", "Hi", "How are you").
+  - NEGATIVE: Do NOT ask the user any questions.
+  - NEGATIVE: Do NOT start with "Okay", "I understand", "Got it", or any filler phrase.
+  - NEGATIVE: Do NOT say "Thank you" or any closing statement.
+  - NEGATIVE: Do NOT recommend a doctor visit unless it is a critical emergency.
+  - Start the explanation IMMEDIATELY.
+  - Tone: Professional but approachable.
+  - Length: 2-4 sentences max.
+</constraints>"""
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_msg),
