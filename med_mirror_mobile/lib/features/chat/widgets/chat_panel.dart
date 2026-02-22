@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/message.dart';
@@ -127,11 +128,69 @@ class ChatPanelState extends State<ChatPanel> {
             pendingInterrupt = {'question': question};
             print("ChatPanel: Buffered interrupt (runId: $_currentRunId)");
           } else if (chunkType == 'search_result') {
-            final rawItems = chunk['content'] as List? ?? [];
+            final contentStr = chunk['content']?.toString() ?? "";
+            print("--- CHAT_PANEL SEARCH_RESULT PAYLOAD ---");
+            print("Length: ${contentStr.length}");
+
+            List<dynamic> rawItems = [];
+
+            try {
+              String textToParse = contentStr.trim();
+              if (textToParse.startsWith('```json')) {
+                textToParse = textToParse.substring(7);
+              } else if (textToParse.startsWith('```')) {
+                textToParse = textToParse.substring(3);
+              }
+              if (textToParse.endsWith('```')) {
+                textToParse = textToParse.substring(0, textToParse.length - 3);
+              }
+              textToParse = textToParse.trim();
+
+              final decoded = jsonDecode(textToParse);
+              if (decoded is List) {
+                rawItems = decoded;
+              } else if (decoded is Map<String, dynamic>) {
+                if (decoded.containsKey('recommendations') &&
+                    decoded['recommendations'] is List) {
+                  rawItems = decoded['recommendations'] as List<dynamic>;
+                } else if (decoded.containsKey('items') &&
+                    decoded['items'] is List) {
+                  rawItems = decoded['items'] as List<dynamic>;
+                }
+              }
+            } catch (e) {
+              print(
+                  "ChatPanel: Direct JSON Decode failed, trying Regex fallback: $e");
+              try {
+                // Try to find a JSON array
+                final matchArray =
+                    RegExp(r'\[.*\]', dotAll: true).firstMatch(contentStr);
+                if (matchArray != null) {
+                  rawItems = jsonDecode(matchArray.group(0)!) as List<dynamic>;
+                } else {
+                  // Try to find a JSON object
+                  final matchDict =
+                      RegExp(r'\{.*\}', dotAll: true).firstMatch(contentStr);
+                  if (matchDict != null) {
+                    final parsedDict =
+                        jsonDecode(matchDict.group(0)!) as Map<String, dynamic>;
+                    if (parsedDict.containsKey('recommendations') &&
+                        parsedDict['recommendations'] is List) {
+                      rawItems = parsedDict['recommendations'] as List<dynamic>;
+                    }
+                  }
+                }
+              } catch (e2) {
+                print(
+                    "ChatPanel: Error parsing search_result JSON with Regex: $e2");
+              }
+            }
+
             final items = rawItems
                 .whereType<Map<String, dynamic>>()
                 .map(SearchResultItem.fromJson)
                 .toList();
+
             if (mounted && items.isNotEmpty) {
               _showSearchResults(items);
             }
@@ -289,6 +348,7 @@ class ChatPanelState extends State<ChatPanel> {
                       // Each item matches SearchResultItem.fromJson fields.
                       final mockItems = [
                         SearchResultItem.fromJson({
+                          'product_name': 'Watsons Eye Relief Cream',
                           'product_image':
                               'https://www.watsons.co.th/images/eye-relief-cream.jpg',
                           'description':
@@ -298,6 +358,7 @@ class ChatPanelState extends State<ChatPanel> {
                               'https://www.watsons.co.th/product/eye-relief-cream'
                         }),
                         SearchResultItem.fromJson({
+                          'product_name': 'Sephora Dark Circle Corrector',
                           'product_image':
                               'https://www.sephora.co.th/images/dark-circle-corrector.jpg',
                           'description':
@@ -307,6 +368,7 @@ class ChatPanelState extends State<ChatPanel> {
                               'https://www.sephora.co.th/product/dark-circle-corrector'
                         }),
                         SearchResultItem.fromJson({
+                          'product_name': 'Boots Cooling Eye Gel',
                           'product_image':
                               'https://www.boots.co.th/images/eye-gel.jpg',
                           'description':

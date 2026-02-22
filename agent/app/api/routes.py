@@ -242,19 +242,19 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                     if "shopping_search" in data:
                         output = data["shopping_search"]
                         if isinstance(output, dict):
-                            # Process messages as text
-                            messages = output.get("messages", [])
-                            for msg in messages:
-                                content = getattr(msg, 'content', str(msg))
-                                yield f"data: {json.dumps({'type': 'text', 'content': content})}\n\n"
+                            # (Messages are already streamed automatically by the 'messages' stream mode)
                             
                             # Process search results
-                            results = output.get("search_results", [])
+                            results = output.get("search_results", "")
                             if results:
-                                yield f"data: {json.dumps({'type': 'search_result', 'content': results})}\n\n"
+                                # Ensure we are passing a string to match the frontend regex parsing
+                                if hasattr(results, 'content'):
+                                    results_str = results.content
+                                else:
+                                    results_str = str(results)
+                                yield f"data: {json.dumps({'type': 'search_result', 'content': results_str})}\n\n"
                             else:
                                 yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
-
 
             # --- FINAL OUTPUT ---
             debug_payload = {
