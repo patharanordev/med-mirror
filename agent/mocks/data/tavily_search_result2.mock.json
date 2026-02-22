@@ -1,0 +1,22 @@
+{
+    "recommendations": [
+        {
+            "product_image": "https://www.watsons.co.th/images/eye-relief-cream.jpg",
+            "description": "ครีมช่วยลดอาการตาบวมและสีเข้มรอบตา ใช้ได้ดีสำหรับผู้ที่นั่งทำงานหน้าจอเป็นเวลานาน",
+            "price": "250 บาท",
+            "ref": "https://www.watsons.co.th/product/eye-relief-cream"
+        },
+        {
+            "product_image": "https://www.sephora.co.th/images/dark-circle-corrector.jpg",
+            "description": "ครีมปรับสีและลดอาการตาบวม ช่วยให้ผิวรอบตาสดใสขึ้น",
+            "price": "320 บาท",
+            "ref": "https://www.sephora.co.th/product/dark-circle-corrector"
+        },
+        {
+            "product_image": "https://www.boots.co.th/images/eye-gel.jpg",
+            "description": "ครีมเย็นช่วยลดอาการบวมและร้อนรอบตา ใช้ได้ดีหลังทำงานหน้าจอ",
+            "price": "180 บาท",
+            "ref": "https://www.boots.co.th/product/eye-gel"
+        }
+    ]
+}

@@ -1,7 +1,22 @@
+from typing import List, Annotated
+from typing_extensions import TypedDict
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
+from langchain.agents import create_agent
+from langchain_core.messages import AIMessage
 from app.core.config import settings
 from app.core.models import AgentState
+
+from pydantic import BaseModel, Field
+
+class ProductRecommendation(BaseModel):
+    product_image: str = Field(description="URL of the product image. Leave empty if unavailable.")
+    description: str = Field(description="Brief description of the product.")
+    price: str = Field(description="Price of the product.")
+    ref: str = Field(description="URL of the product or store.")
+
+class AgentOutputFormat(BaseModel):
+    recommendations: List[ProductRecommendation] = Field(description="List of exactly 3 recommended products based on the search")
 
 class ShoppingSearchNode:
     def __init__(self, llm, tavily_tool=None):
@@ -9,29 +24,32 @@ class ShoppingSearchNode:
         self.tavily_tool = tavily_tool
 
     async def __call__(self, state: AgentState, config: RunnableConfig):
-        query = f"products for {state.get('symptoms', 'skin')} on {state.get('body_part', 'body')}"
-        
-        raw_results = []
-        if self.tavily_tool:
-            results = await self.tavily_tool.ainvoke(query)
-            # Tavily returns a list of dicts with title, url, content, score
-            if isinstance(results, list):
-                raw_results = results
-            content = str(results)
-        else:
-            content = "Search unavailable."
-            
         language = state.get("language", "English")
+        explanation = state.get("explanation", "No explanation provided.")
 
-        summarize_system = """<role>Medical Product Recommender</role>
+        # Derive the expected JSON structure dynamically from Pydantic model
+        import json
+        json_schema_text = json.dumps(AgentOutputFormat.model_json_schema(), indent=2)
+
+        system_prompt = f"""<role>Medical Product Recommender</role>
 <language>{language}</language>
 
-<goal>Briefly recommend relevant products based on the search results for the patient's condition.</goal>
+<goal>Search for exactly 3 relevant topical treatments or skincare products based on the patient's condition and return them in a structured JSON format.</goal>
+
+<context>
+The patient recently received this medical explanation:
+{explanation}
+</context>
 
 <task>
-  Read the search results and extract the most relevant product names or resources.
-  Present them naturally as a short recommendation — not a list of links, but a helpful suggestion.
+  1. Use your search tool to find exactly 3 relevant topical treatments, medications, or skincare products for this condition. Prioritize Watsons, Sephora, or Boots.
+  2. Extract the product image, description, price, and URL.
+  3. You MUST return ONLY a valid JSON object matching the schema below.
 </task>
+
+<json_schema>
+{json_schema_text}
+</json_schema>
 
 <constraints>
   - CRITICAL: Respond in {language} ONLY. Do NOT add translations in brackets.
@@ -39,26 +57,53 @@ class ShoppingSearchNode:
   - NEGATIVE: Do NOT say "Thank you" or any closing statement.
   - NEGATIVE: Do NOT repeat or acknowledge the user's previous message.
   - NEGATIVE: Do NOT translate anything inside brackets.
+  - You MUST use the search tool if you do not have exact, real products for the specified condition.
+  - Return ONLY real products found online. Do not hallucinate product links.
+  - Output exactly 3 results.
   - No robot talk. Direct and warm tone.
   - Style: Concise, connected, and smart.
   - Keep it to 1-2 sentences max, followed by a short product list if applicable.
+  - You MUST return the JSON block. Do not include any other text outside the JSON.
 </constraints>"""
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", settings.get_system_prompt()),
-            ("system", summarize_system),
-            ("user", "{search_results}")
-        ])
+        tools = [self.tavily_tool] if self.tavily_tool else []
         
-        inputs = {
-            "context": state.get("context", "No context"),
-            "search_results": content,
-            "language": language,
-        }
+        agent = create_agent(
+            model=self.llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            response_format=AgentOutputFormat
+        )
         
-        chain = (prompt | self.llm).with_config({"run_name": "ShoppingSummarizeChain"})
-        response = await chain.ainvoke(inputs, config=config)
+        try:
+            response = await agent.ainvoke({"messages": state["messages"]}, config=config)
+            
+            # Defensive parsing: handle Pydantic model or dict
+            if isinstance(response, AgentOutputFormat):
+                recommendations = [item.model_dump() for item in response.recommendations]
+            elif isinstance(response, dict):
+                recommendations = response.get("recommendations", [])
+            else:
+                # If it returned a string or AIMessage content instead, try to extract JSON
+                import json
+                import re
+                content = getattr(response, 'content', str(response))
+                # Simple regex to find content between { }
+                match = re.search(r'(\{.*\})', content, re.DOTALL)
+                if match:
+                    parsed = json.loads(match.group(1))
+                    recommendations = parsed.get("recommendations", [])
+                else:
+                    recommendations = []
+            
+            # Formulate a nice chat message acknowledging the products
+            text_response = AIMessage(content=f"Here are some recommended products for you:")
+        except Exception as e:
+            print(f"Error in ShoppingSearchNode: {e}")
+            recommendations = []
+            text_response = AIMessage(content="I'm sorry, I couldn't find any products at the moment.")
+
         return {
-            "messages": [response],
-            "search_results": raw_results,
+            "messages": [text_response],
+            "search_results": recommendations,
         }

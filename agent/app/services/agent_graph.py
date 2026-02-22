@@ -23,12 +23,26 @@ class AgentService:
             streaming=True,
             max_tokens=2048
         )
+
+        self.llm_tool_call = ChatOpenAI(
+            base_url=settings.LLM_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+            model=settings.LLM_MODEL_WITH_TOOL_CALL,
+            temperature=0,
+            streaming=True
+        )
         
         self.tavily_tool = None
         try:
             if settings.TAVILY_API_KEY and "placeholder" not in settings.TAVILY_API_KEY:
                 from langchain_community.tools.tavily_search import TavilySearchResults
-                self.tavily_tool = TavilySearchResults(tavily_api_key=settings.TAVILY_API_KEY, max_results=3)
+                self.tavily_tool = TavilySearchResults(
+                    tavily_api_key=settings.TAVILY_API_KEY, 
+                    max_results=3,
+                    search_depth="advanced",
+                    include_images=True,
+                    include_image_descriptions=True
+                )
         except ImportError:
             pass
 
@@ -45,7 +59,13 @@ class AgentService:
         else:
             raise ValueError(f"Unknown workflow: {self.active_workflow}")
             
-        self.graph = build_graph(self.llm, self.llm_diagnosis, self.checkpointer, self.tavily_tool)
+        self.graph = build_graph(
+            self.llm, 
+            self.llm_diagnosis, 
+            self.llm_tool_call,
+            self.checkpointer, 
+            self.tavily_tool
+        )
         
         if not os.path.exists("output"):
             os.mkdir("output")

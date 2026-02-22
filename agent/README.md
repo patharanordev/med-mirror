@@ -86,3 +86,34 @@ The agent now features smart **Shopping Intent Detection** powered by the LLM (`
     -   If **False**, the session ends normally.
 
 This replaces the previous "Human-in-the-Loop" question node, providing a smoother and faster user experience.
+
+## Testing
+
+> ---
+> **NOTE**: Some test scripts require Ollama to be running locally. Make sure Ollama is running before running the tests.
+>
+> ---
+
+Install python3.12:
+
+```bash
+python3.12 -m venv .venv
+
+# for winos
+.\.venv\Scripts\Activate.ps1
+
+# for linux
+source .venv/bin/activate
+```
+
+Install pytest with dependencies:
+
+```bash
+pip install langchain langchain_openai pydantic_settings pytest pytest-asyncio
+```
+
+Ex. run tests:
+
+```bash
+pytest tests/test_agent_struct_output.py
+```

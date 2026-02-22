@@ -1,23 +1,23 @@
 /// Immutable data class representing a single Tavily search result.
 class SearchResultItem {
-  final String title;
-  final String url;
-  final String content;
-  final double score;
+  final String productImage;
+  final String description;
+  final String price;
+  final String ref;
 
   const SearchResultItem({
-    required this.title,
-    required this.url,
-    required this.content,
-    required this.score,
+    required this.productImage,
+    required this.description,
+    required this.price,
+    required this.ref,
   });
 
   factory SearchResultItem.fromJson(Map<String, dynamic> json) {
     return SearchResultItem(
-      title: (json['title'] as String?) ?? '',
-      url: (json['url'] as String?) ?? '',
-      content: (json['content'] as String?) ?? '',
-      score: ((json['score'] as num?) ?? 0).toDouble(),
+      productImage: (json['product_image'] as String?) ?? '',
+      description: (json['description'] as String?) ?? '',
+      price: (json['price'] as String?) ?? '',
+      ref: (json['ref'] as String?) ?? '',
     );
   }
 }

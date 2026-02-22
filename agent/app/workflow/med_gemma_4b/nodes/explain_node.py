@@ -53,7 +53,8 @@ class ExplainNode:
         try:
             chain = (prompt | self.llm).with_config({"run_name": "ExplainChain"})
             response = await chain.ainvoke(inputs, config=config)
-            return {"messages": [response]}
+            return {"messages": [response], "explanation": response.content}
         except Exception as e:
             print(f"Explain Node Error: {e}")
-            return {"messages": [AIMessage(content="I recommend seeing a doctor for a proper checkup.")]}
+            msg = AIMessage(content="I recommend seeing a doctor for a proper checkup.")
+            return {"messages": [msg], "explanation": msg.content}

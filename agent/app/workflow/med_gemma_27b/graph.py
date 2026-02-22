@@ -10,13 +10,13 @@ from app.workflow.med_gemma_27b.nodes.diagnosis_node import DiagnosisNode
 from app.workflow.med_gemma_27b.nodes.shopping_search_node import ShoppingSearchNode
 from app.workflow.med_gemma_27b.nodes.explain_node import ExplainNode
 
-def build_graph(llm, llm_diagnosis, checkpointer, tavily_tool=None):
+def build_graph(llm, llm_diagnosis, llm_tool_call, checkpointer, tavily_tool=None):
     # Initialize Nodes
     thinking_node = ThinkingNode(llm)
     general_chat_node = GeneralChatNode(llm)
     interview_node = InterviewNode(llm)
     diagnosis_node = DiagnosisNode(llm_diagnosis)
-    shopping_search_node = ShoppingSearchNode(llm, tavily_tool)
+    shopping_search_node = ShoppingSearchNode(llm_tool_call, tavily_tool)
     explain_node = ExplainNode(llm)
 
     workflow = StateGraph(AgentState)

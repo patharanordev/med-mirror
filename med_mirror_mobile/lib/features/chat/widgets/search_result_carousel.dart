@@ -3,33 +3,15 @@
 /// Performance notes:
 /// - [RepaintBoundary] isolates the overlay GPU layer.
 /// - [PageView.builder] lazily constructs cards.
-/// - OG image fetch is driven by [SearchCardViewModel] (ChangeNotifier),
-///   so only the image zone repaints on state change — not the whole card.
-/// - [OgImageRepository] holds an in-memory cache; swiping back is instant.
 /// - Static text styles are `static const` to avoid per-build allocations.
 /// - [Image.network] with [cacheWidth] limits GPU texture memory.
-library;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:provider/provider.dart';
 
-import '../data/og_image_service.dart';
-import '../domain/og_image_repository.dart';
 import '../models/search_result_item.dart';
-import '../presentation/search_card_view_model.dart';
-
-// ---------------------------------------------------------------------------
-// Single shared repository — one per carousel instance (lives for carousel
-// lifetime). Holds the in-memory og:image cache.
-// ---------------------------------------------------------------------------
-OgImageRepository _buildRepository() =>
-    OgImageRepository(service: const OgImageService());
 
 /// Scale [base] font size proportionally to the screen's shortest side.
-/// Reference device: 360 logical pixels (typical compact Android phone).
-/// Clamped to [0.75 × base … 1.8 × base] to avoid extreme sizes.
 double _sp(double base, Size size) =>
     base * (size.shortestSide / 360).clamp(0.75, 1.8);
 
@@ -38,11 +20,23 @@ double _sp(double base, Size size) =>
 // ---------------------------------------------------------------------------
 class SearchResultCarousel extends StatefulWidget {
   final List<SearchResultItem> items;
+  final String agentBaseUrl;
 
-  const SearchResultCarousel({super.key, required this.items});
+  const SearchResultCarousel({
+    super.key,
+    required this.items,
+    required this.agentBaseUrl,
+  });
 
   @override
   State<SearchResultCarousel> createState() => _SearchResultCarouselState();
+}
+
+String _proxiedUrl(String originalUrl, String baseUrl) {
+  if (originalUrl.isEmpty) return '';
+  // Avoid double-proxying
+  if (originalUrl.contains('/proxy-image?url=')) return originalUrl;
+  return '$baseUrl/proxy-image?url=${Uri.encodeComponent(originalUrl)}';
 }
 
 class _SearchResultCarouselState extends State<SearchResultCarousel>
@@ -52,13 +46,9 @@ class _SearchResultCarouselState extends State<SearchResultCarousel>
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  // One repository shared across all cards in this carousel session.
-  late final OgImageRepository _repository;
-
   @override
   void initState() {
     super.initState();
-    _repository = _buildRepository();
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -90,10 +80,8 @@ class _SearchResultCarouselState extends State<SearchResultCarousel>
               width: size.width / 3,
               height: size.height * 0.72,
               decoration: BoxDecoration(
-                // Pure black background
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(20),
-
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x66000000),
@@ -106,13 +94,10 @@ class _SearchResultCarouselState extends State<SearchResultCarousel>
                 borderRadius: BorderRadius.circular(19),
                 child: Column(
                   children: [
-                    // ── Header ─────────────────────────────────────────────
                     _CarouselHeader(
                       currentPage: _currentPage,
                       totalPages: widget.items.length,
                     ),
-
-                    // ── Cards ──────────────────────────────────────────────
                     Expanded(
                       child: PageView.builder(
                         controller: _pageController,
@@ -120,19 +105,13 @@ class _SearchResultCarouselState extends State<SearchResultCarousel>
                         onPageChanged: (page) =>
                             setState(() => _currentPage = page),
                         itemBuilder: (context, index) {
-                          return ChangeNotifierProvider(
-                            // Fresh ViewModel per card slot, but repository
-                            // cache prevents duplicate network requests.
-                            create: (_) => SearchCardViewModel(
-                              repository: _repository,
-                            ),
-                            child: _SearchCard(item: widget.items[index]),
+                          return _SearchCard(
+                            item: widget.items[index],
+                            baseUrl: widget.agentBaseUrl,
                           );
                         },
                       ),
                     ),
-
-                    // ── Page indicator ─────────────────────────────────────
                     if (widget.items.length > 1)
                       _PageIndicator(
                         count: widget.items.length,
@@ -150,7 +129,7 @@ class _SearchResultCarouselState extends State<SearchResultCarousel>
 }
 
 // ---------------------------------------------------------------------------
-// Header — extracted to avoid rebuilding when page changes
+// Header
 // ---------------------------------------------------------------------------
 class _CarouselHeader extends StatelessWidget {
   final int currentPage;
@@ -227,73 +206,38 @@ class _PageIndicator extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Card — 2-zone layout
-// Top  (40%): OG image
-// Bottom (60%): Markdown content
+// Card — Product Layout
 // ---------------------------------------------------------------------------
-class _SearchCard extends StatefulWidget {
+class _SearchCard extends StatelessWidget {
   final SearchResultItem item;
+  final String baseUrl;
 
-  const _SearchCard({required this.item});
-
-  @override
-  State<_SearchCard> createState() => _SearchCardState();
-}
-
-class _SearchCardState extends State<_SearchCard> {
-  @override
-  void initState() {
-    super.initState();
-    // Kick off image fetch after first frame so PageView layout is stable.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<SearchCardViewModel>().loadOgImage(widget.item.url);
-      }
-    });
-  }
+  const _SearchCard({required this.item, required this.baseUrl});
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
 
-    // ── Responsive styles (scale with screen shortest side) ─────────────────
-    final titleStyle = TextStyle(
-      color: Colors.white,
-      fontSize: _sp(12, size),
-      fontWeight: FontWeight.w600,
-      height: 1.3,
-    );
-    final urlStyle = TextStyle(
+    final priceStyle = TextStyle(
       color: Colors.cyanAccent,
+      fontSize: _sp(13, size),
+      fontWeight: FontWeight.bold,
+    );
+    final refStyle = TextStyle(
+      color: Colors.white38,
       fontSize: _sp(9, size),
+      decoration: TextDecoration.underline,
     );
     final mdStyleSheet = MarkdownStyleSheet(
       p: TextStyle(
         color: const Color(0xCCFFFFFF),
         fontSize: _sp(11, size),
-        height: 1.55,
+        height: 1.5,
       ),
       strong: TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.w700,
         fontSize: _sp(11, size),
-      ),
-      h1: TextStyle(
-          color: Colors.white,
-          fontSize: _sp(14, size),
-          fontWeight: FontWeight.bold),
-      h2: TextStyle(
-          color: Colors.white,
-          fontSize: _sp(12, size),
-          fontWeight: FontWeight.bold),
-      h3: TextStyle(
-          color: const Color(0xCCFFFFFF),
-          fontSize: _sp(11, size),
-          fontWeight: FontWeight.w600),
-      listBullet: TextStyle(color: Colors.cyanAccent, fontSize: _sp(11, size)),
-      blockquoteDecoration: const BoxDecoration(
-        color: Color(0x1AFFFFFF),
-        borderRadius: BorderRadius.all(Radius.circular(4)),
       ),
     );
 
@@ -302,39 +246,51 @@ class _SearchCardState extends State<_SearchCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Zone 1: OG Image (40%) ────────────────────────────────────────
+          // ── Zone 1: Product Image (45%) ──────────────────────────────────
           Flexible(
-            flex: 4,
-            child: RepaintBoundary(
-              child: _OgImageZone(item: widget.item),
+            flex: 45,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: item.productImage.isNotEmpty
+                  ? Image.network(
+                      _proxiedUrl(item.productImage, baseUrl),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      cacheWidth: 800,
+                      errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                    )
+                  : _buildPlaceholder(),
             ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Price + View Details Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(item.price, style: priceStyle),
+              if (item.ref.isNotEmpty) Text('Tap to view', style: refStyle),
+            ],
           ),
 
           const SizedBox(height: 10),
 
-          // Title + URL
-          Text(
-            widget.item.title,
-            style: titleStyle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            widget.item.url,
-            style: urlStyle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-
-          const SizedBox(height: 8),
-
-          // ── Zone 2: Markdown content (60%) ────────────────────────────────
+          // ── Zone 2: Description (55%) ────────────────────────────────────
           Flexible(
-            flex: 6,
-            child: _ContentZone(
-              content: widget.item.content,
-              mdStyleSheet: mdStyleSheet,
+            flex: 55,
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0x0DFFFFFF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Markdown(
+                data: item.description,
+                styleSheet: mdStyleSheet,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(12),
+              ),
             ),
           ),
         ],
@@ -344,83 +300,16 @@ class _SearchCardState extends State<_SearchCard> {
         .fadeIn(duration: 250.ms)
         .slideY(begin: 0.04, end: 0, duration: 250.ms);
   }
-}
 
-// ---------------------------------------------------------------------------
-// OG Image Zone — listens to ViewModel, repaints only this zone
-// ---------------------------------------------------------------------------
-class _OgImageZone extends StatelessWidget {
-  final SearchResultItem item;
-
-  const _OgImageZone({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final vm = context.watch<SearchCardViewModel>();
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: switch (vm.status) {
-        OgImageStatus.loading => _buildPlaceholder(isLoading: true),
-        OgImageStatus.loaded => Image.network(
-            vm.imageUrl!,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            // Limit GPU texture footprint — max 800px wide
-            cacheWidth: 800,
-            errorBuilder: (_, __, ___) => _buildPlaceholder(isLoading: false),
-          ),
-        OgImageStatus.error => _buildPlaceholder(isLoading: false),
-      },
-    );
-  }
-
-  Widget _buildPlaceholder({required bool isLoading}) {
+  Widget _buildPlaceholder() {
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0x1AFFFFFF),
-        borderRadius: BorderRadius.circular(12),
+      decoration: const BoxDecoration(
+        color: Color(0x1AFFFFFF),
       ),
-      child: Center(
-        child: isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white38,
-                ),
-              )
-            : const Icon(Icons.image_not_supported_outlined,
-                color: Colors.white30, size: 36),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Content Zone — Markdown-rendered, scrollable
-// ---------------------------------------------------------------------------
-class _ContentZone extends StatelessWidget {
-  final String content;
-  final MarkdownStyleSheet mdStyleSheet;
-
-  const _ContentZone({required this.content, required this.mdStyleSheet});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0x0DFFFFFF), // Very subtle white tint separator
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Markdown(
-        data: content,
-        styleSheet: mdStyleSheet,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(12),
-        shrinkWrap: false,
+      child: const Center(
+        child:
+            Icon(Icons.shopping_bag_outlined, color: Colors.white30, size: 36),
       ),
     );
   }

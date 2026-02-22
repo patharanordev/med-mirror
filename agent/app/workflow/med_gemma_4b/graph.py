@@ -11,11 +11,11 @@ from app.workflow.med_gemma_4b.nodes.ask_treatment_node import AskTreatmentNode
 # from app.workflow.med_gemma_4b.nodes.diagnosis.graph import build_diagnosis_subgraph
 from app.workflow.diagnosis_4b.graph import build_diagnosis_subgraph
 
-def build_graph(llm, llm_diagnosis, checkpointer, tavily_tool=None):
+def build_graph(llm, llm_diagnosis, llm_tool_call, checkpointer, tavily_tool=None):
     # Initialize Nodes
     thinking_node = ThinkingNode(llm)
     general_chat_node = GeneralChatNode(llm)
-    shopping_search_node = ShoppingSearchNode(llm, tavily_tool)
+    shopping_search_node = ShoppingSearchNode(llm_tool_call, tavily_tool)
     explain_node = ExplainNode(llm)
     ask_treatment_node = AskTreatmentNode(llm)
     

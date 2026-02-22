@@ -36,8 +36,9 @@ class Settings(BaseSettings):
     # LLM Settings
     LLM_BASE_URL: str = "http://host.docker.internal:11434/v1"
     LLM_API_KEY: str = "ollama"
-    LLM_MODEL: str = "qwen3:8b"
+    LLM_MODEL: str = "gemma3n:e4b"
     LLM_MODEL_DIAGNOSIS: str = "medgemma-1.5:4b"
+    LLM_MODEL_WITH_TOOL_CALL: str = "qwen3:4b"
     
     # Tool Settings
     TAVILY_API_KEY: str = "tvly-placeholder"

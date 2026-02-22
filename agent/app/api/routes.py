@@ -2,9 +2,10 @@ import json
 import io
 import logging
 import uuid
-from fastapi import APIRouter, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, UploadFile, File, Query
+from fastapi.responses import StreamingResponse, Response
 from langchain_core.messages import HumanMessage, AIMessage
+import httpx
 
 from app.core.config import settings
 from app.core.models import ChatRequest, PatientInfo
@@ -24,6 +25,22 @@ async def root():
         "llm_ready": agent_service.is_ready,
         "llm_model": settings.LLM_MODEL
     }
+@router.get("/proxy-image")
+async def proxy_image(url: str = Query(...)):
+    """
+    Proxy external images to bypass CORS.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=10.0)
+            resp.raise_for_status()
+            return Response(
+                content=resp.content, 
+                media_type=resp.headers.get("content-type", "image/jpeg")
+            )
+    except Exception as e:
+        logger.error(f"Image Proxy failed for {url}: {e}")
+        return Response(status_code=404)
 
 @router.post("/stt")
 async def speech_to_text(file: UploadFile = File(...)):
@@ -224,13 +241,19 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                     # 3. Shopping Node - Emit raw search results to client
                     if "shopping_search" in data:
                         output = data["shopping_search"]
-                        results = []
                         if isinstance(output, dict):
+                            # Process messages as text
+                            messages = output.get("messages", [])
+                            for msg in messages:
+                                content = getattr(msg, 'content', str(msg))
+                                yield f"data: {json.dumps({'type': 'text', 'content': content})}\n\n"
+                            
+                            # Process search results
                             results = output.get("search_results", [])
-                        if results:
-                            yield f"data: {json.dumps({'type': 'search_result', 'content': results})}\n\n"
-                        else:
-                            yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
+                            if results:
+                                yield f"data: {json.dumps({'type': 'search_result', 'content': results})}\n\n"
+                            else:
+                                yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
 
 
             # --- FINAL OUTPUT ---

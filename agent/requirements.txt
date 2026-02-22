@@ -12,3 +12,4 @@ pydantic-settings
 faster-whisper
 python-multipart
 numpy
+httpx

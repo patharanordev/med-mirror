@@ -9,10 +9,15 @@ class ShoppingSearchNode:
         self.tavily_tool = tavily_tool
 
     async def __call__(self, state: AgentState, config: RunnableConfig):
-        query = f"products for {state.get('symptoms', 'skin')} on {state.get('body_part', 'body')}"
+        symptoms = state.get('symptoms', 'skin')
+        body_part = state.get('body_part', 'body')
+        query = f"buy skincare product for {symptoms} {body_part} online store Watsons OR Sephora OR Boots"
         
+        raw_results = []
         if self.tavily_tool:
             results = await self.tavily_tool.ainvoke(query)
+            if isinstance(results, list):
+                raw_results = results
             content = str(results)
         else:
             content = "Search unavailable."
@@ -29,4 +34,7 @@ class ShoppingSearchNode:
         
         chain = (prompt | self.llm).with_config({"run_name": "ShoppingSummarizeChain"})
         response = await chain.ainvoke(inputs, config=config)
-        return {"messages": [response]}
+        return {
+            "messages": [response],
+            "search_results": raw_results,
+        }

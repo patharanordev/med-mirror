@@ -127,7 +127,7 @@ class ChatPanelState extends State<ChatPanel> {
             pendingInterrupt = {'question': question};
             print("ChatPanel: Buffered interrupt (runId: $_currentRunId)");
           } else if (chunkType == 'search_result') {
-            final rawItems = chunk['items'] as List? ?? [];
+            final rawItems = chunk['content'] as List? ?? [];
             final items = rawItems
                 .whereType<Map<String, dynamic>>()
                 .map(SearchResultItem.fromJson)
@@ -192,10 +192,14 @@ class ChatPanelState extends State<ChatPanel> {
   /// Uses showDialog so the carousel manages its own overlay layer —
   /// no setState needed in ChatPanel, preventing a full chat list rebuild.
   void _showSearchResults(List<SearchResultItem> items) {
+    final appState = context.read<AppState>();
     showDialog<void>(
       context: context,
       barrierColor: const Color(0x80000000), // 50% black barrier
-      builder: (_) => SearchResultCarousel(items: items),
+      builder: (_) => SearchResultCarousel(
+        items: items,
+        agentBaseUrl: appState.agentUrl,
+      ),
     );
   }
 
@@ -285,27 +289,30 @@ class ChatPanelState extends State<ChatPanel> {
                       // Each item matches SearchResultItem.fromJson fields.
                       final mockItems = [
                         SearchResultItem.fromJson({
-                          'title':
-                              'Nourishing Body Care Products for All Skin | Biotherm US',
-                          'url': 'https://www.biotherm.com/bodycare.list',
-                          'content':
-                              'Nourish, hydrate and protect skin with our body care products, featuring moisturiser, lotion, body wash, fragrance and more. Powered by natural, science-backed ingredients including our signature Life Plankton™ water.',
-                          'score': 0.7817479,
+                          'product_image':
+                              'https://www.watsons.co.th/images/eye-relief-cream.jpg',
+                          'description':
+                              'ครีมช่วยลดอาการตาบวมและสีเข้มรอบตา ใช้ได้ดีสำหรับผู้ที่นั่งทำงานหน้าจอเป็นเวลานาน',
+                          'price': '250 บาท',
+                          'ref':
+                              'https://www.watsons.co.th/product/eye-relief-cream'
                         }),
                         SearchResultItem.fromJson({
-                          'title':
-                              "Dermatologist's Favorite Body Skincare Products - YouTube",
-                          'url': 'https://www.youtube.com/watch?v=0qnpo3CcpnM',
-                          'content':
-                              "We often don't give the same attention to the skin on our body as we do to the skin on our face. Here are some of my favorite body care products from the perspective of a dermatologist.",
-                          'score': 0.7272211,
+                          'product_image':
+                              'https://www.sephora.co.th/images/dark-circle-corrector.jpg',
+                          'description':
+                              'ครีมปรับสีและลดอาการตาบวม ช่วยให้ผิวรอบตาสดใสขึ้น',
+                          'price': '320 บาท',
+                          'ref':
+                              'https://www.sephora.co.th/product/dark-circle-corrector'
                         }),
                         SearchResultItem.fromJson({
-                          'title': 'Body Care Products | Ulta Beauty',
-                          'url': 'https://www.ulta.com/shop/body-care',
-                          'content':
-                              "Whether you're trying to take a relaxing bath or looking to pamper yourself, Ulta Beauty offers a variety of bath and body products. Find bath and shower gels, body moisturizers, self-tanners and more.",
-                          'score': 0.65676886,
+                          'product_image':
+                              'https://www.boots.co.th/images/eye-gel.jpg',
+                          'description':
+                              'ครีมเย็นช่วยลดอาการบวมและร้อนรอบตา ใช้ได้ดีหลังทำงานหน้าจอ',
+                          'price': '180 บาท',
+                          'ref': 'https://www.boots.co.th/product/eye-gel'
                         }),
                       ];
                       _showSearchResults(mockItems);

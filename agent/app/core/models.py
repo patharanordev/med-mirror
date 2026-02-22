@@ -23,6 +23,7 @@ class AgentState(TypedDict):
     diagnostic_question: Optional[str]
     is_critical: Optional[bool]
     diagnosis_confidence: Optional[float]
+    explanation: Optional[str] # Output of the explain node
     
     # Diagnosis Subgraph State
     patient_info: Optional[dict] # Stores the extracted PatientInfo

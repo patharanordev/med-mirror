@@ -33,8 +33,13 @@ class AskTreatmentNode:
 
 <goal>Ask the patient whether they would like to see recommended topical treatment products for their condition.</goal>
 
+<context>
+The patient recently received this medical explanation:
+{explanation}
+</context>
+
 <task>
-  Ask ONE short, natural question that invites the patient to say whether they want product recommendations.
+  Ask ONE short, natural question that invites the patient to say whether they want product recommendations based on their diagnosis.
   The question must fit naturally into a medical conversation — warm but not robotic.
 </task>
 
@@ -55,11 +60,12 @@ class AskTreatmentNode:
         print("--- ASK TREATMENT NODE (HITL) ---")
 
         user_language = state.get("language", "English")
+        explanation = state.get("explanation", "No explanation provided.")
 
         # --- Step 1: Generate the question via LLM in the user's detected language ---
         try:
             chain = (self.question_prompt | self.llm).with_config({"run_name": "AskTreatmentChain"})
-            response = await chain.ainvoke({"language": user_language}, config=config)
+            response = await chain.ainvoke({"language": user_language, "explanation": explanation}, config=config)
             question = response.content.strip()
         except Exception as e:
             print(f"AskTreatmentNode question generation error: {e}")
