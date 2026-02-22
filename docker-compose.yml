@@ -59,7 +59,7 @@ services:
       # Point to the local Ollama service by default
       - LLM_BASE_URL=http://ollama:11434/v1
       - LLM_API_KEY=ollama
-      - LLM_MODEL=gemma:2b
+      - LLM_MODEL=medgemma-1.5:4b
     depends_on:
       - ollama
 

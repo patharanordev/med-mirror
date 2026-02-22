@@ -49,6 +49,7 @@ services:
       - edge_net
     volumes:
       - ./hf_cache:/root/.cache/huggingface
+      - ./agent:/app
     env_file:
       - ./agent/.env.macos
     depends_on:
@@ -58,7 +59,7 @@ services:
   # 4. Local LLM Backend (Ollama)
   # ---------------------------------------------------------
   ollama:
-    image: ollama/ollama:0.15.2
+    image: ollama/ollama:latest
     container_name: med_mirror_ollama
     restart: unless-stopped
     ports:

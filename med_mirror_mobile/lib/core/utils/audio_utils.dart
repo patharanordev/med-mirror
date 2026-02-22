@@ -6,31 +6,32 @@ class AudioUtils {
     // 1. Convert floats to 16-bit PCM integers
     final pcmData = ByteData(samples.length * 2);
     for (int i = 0; i < samples.length; i++) {
-        double s = samples[i];
-        // Clamp to -1.0 to 1.0
-        if (s > 1.0) s = 1.0;
-        if (s < -1.0) s = -1.0;
-        
-        // Convert to 16-bit int
-        int val = (s * 32767).round();
-        pcmData.setInt16(i * 2, val, Endian.little);
+      double s = samples[i];
+      // Clamp to -1.0 to 1.0
+      if (s > 1.0) s = 1.0;
+      if (s < -1.0) s = -1.0;
+
+      // Convert to 16-bit int
+      int val = (s * 32767).round();
+      pcmData.setInt16(i * 2, val, Endian.little);
     }
 
     // 2. Create Header
     final header = _createWavHeader(samples.length * 2, sampleRate);
-    
+
     // 3. Combine
     final wavFile = Uint8List(header.length + pcmData.lengthInBytes);
     wavFile.setRange(0, header.length, header);
-    wavFile.setRange(header.length, wavFile.length, pcmData.buffer.asUint8List());
-    
+    wavFile.setRange(
+        header.length, wavFile.length, pcmData.buffer.asUint8List());
+
     return wavFile;
   }
 
   static Uint8List _createWavHeader(int dataSize, int sampleRate) {
     final buffer = ByteData(44);
-    final channels = 1;
-    final bitDepth = 16;
+    const channels = 1;
+    const bitDepth = 16;
     final byteRate = sampleRate * channels * (bitDepth ~/ 8);
     final blockAlign = channels * (bitDepth ~/ 8);
 

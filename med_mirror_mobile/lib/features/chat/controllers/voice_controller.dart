@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vad/vad.dart';
@@ -154,8 +153,8 @@ class VoiceController extends ChangeNotifier {
               negativeSpeechThreshold: 0.4,
               minSpeechFrames: 5,
               model: 'v5', // V5 model for better accuracy
-              baseAssetPath: 'assets/models/vad/',
-              onnxWASMBasePath: 'assets/models/vad/');
+              baseAssetPath: '/assets/models/vad/',
+              onnxWASMBasePath: '/assets/models/vad/');
           _isListening = true;
           print("VAD: Started Listening");
         } catch (e) {

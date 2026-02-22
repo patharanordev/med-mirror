@@ -19,7 +19,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
   void initState() {
     super.initState();
     // Pre-fill with typical local IP pattern if empty
-    _controller.text = "192.168.1."; 
+    _controller.text = "192.168.1.";
   }
 
   Future<void> _connect() async {
@@ -27,11 +27,11 @@ class _ConfigScreenState extends State<ConfigScreen> {
     if (ip.isEmpty) return;
 
     setState(() => _isLoading = true);
-    
+
     // Validate connection (simple ping check could go here)
     // For now just save and proceed
     await context.read<AppState>().setHostIp(ip);
-    
+
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainScreen()),
@@ -85,17 +85,24 @@ class _ConfigScreenState extends State<ConfigScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("HOST IP ADDRESS", style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                      const Text("HOST IP ADDRESS",
+                          style: TextStyle(
+                              color: Colors.cyanAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _controller,
-                        style: const TextStyle(fontSize: 20, fontFamily: 'monospace'),
+                        style: const TextStyle(
+                            fontSize: 20, fontFamily: 'monospace'),
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: Colors.black45,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none),
                           hintText: "e.g. 192.168.1.5",
-                          hintStyle: TextStyle(color: Colors.white24),
+                          hintStyle: const TextStyle(color: Colors.white24),
                         ),
                         keyboardType: TextInputType.number,
                       ),
@@ -108,11 +115,18 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
-                          child: _isLoading 
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Text("CONNECT TO SERVER", style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : const Text("CONNECT TO SERVER",
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
