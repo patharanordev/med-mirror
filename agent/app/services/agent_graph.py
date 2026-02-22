@@ -1,13 +1,9 @@
-from typing import Dict, Any, List, Sequence
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnableConfig
-from langgraph.graph import StateGraph, END
-from langgraph.graph.state import CompiledStateGraph
-
+from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.memory import MemorySaver
 from app.core.config import settings
-from app.core.models import AgentState
+import os
+import asyncio
 
 class AgentService:
     def __init__(self):
@@ -15,82 +11,111 @@ class AgentService:
             base_url=settings.LLM_BASE_URL,
             api_key=settings.LLM_API_KEY,
             model=settings.LLM_MODEL,
+            temperature=0, 
             streaming=True
         )
-        # Use dynamic system prompt based on AGENT_LANGUAGE env var
-        system_prompt = settings.get_system_prompt()
-        print(f"AGENT: Using language: {settings.AGENT_LANGUAGE}")
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="messages"),
-        ])
-        self.graph = self._build_graph()
-        self.is_ready = False
 
-    async def warmup(self):
-        """Forces LLM to load model into VRAM."""
-        print("AGENT: Warming up LLM (Ollama)...")
-        try:
-            # Simple dummy invocation
-            await self.llm.ainvoke("hi")
-            self.is_ready = True
-            print("AGENT: LLM Warmup Complete (Ready). 🧠")
-        except Exception as e:
-            print(f"AGENT: LLM Warmup Failed: {e}")
-
-    def _gen_multimodal_message(self, text: str, image_url: str) -> HumanMessage:
-        """Constructs a multimodal human message following OpenAI/LangChain best practices."""
-        print(f"DEBUG: Constructing multimodal message. Image length: {len(image_url)}")
-        return HumanMessage(
-            content=[
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_url},
-                },
-                {"type": "text", "text": text},
-            ]
+        self.llm_diagnosis = ChatOpenAI(
+            base_url=settings.LLM_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+            model=settings.LLM_MODEL_DIAGNOSIS,
+            temperature=0,
+            streaming=True,
+            max_tokens=2048
         )
 
-    async def _call_model(self, state: AgentState, config: RunnableConfig):
-        """Node to call the LLM with the current state."""
-        messages = list(state['messages'])
-        context = state.get('context', 'ไม่ระบุ')
-        image_url = state.get('image_url')
-
-        print(f"DEBUG: Calling model {settings.LLM_MODEL}. Image present: {bool(image_url)}")
-
-        # If we have an image and the last message is a HumanMessage with just text, 
-        # convert it to multimodal for the LLM call.
-        if image_url and len(messages) > 0:
-            last_message = messages[-1]
-            if isinstance(last_message, HumanMessage) and isinstance(last_message.content, str):
-                messages[-1] = self._gen_multimodal_message(last_message.content, image_url)
-
-        # Build chain: Prompt | LLM
-        chain = self.prompt | self.llm
+        self.llm_tool_call = ChatOpenAI(
+            base_url=settings.LLM_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+            model=settings.LLM_MODEL_WITH_TOOL_CALL,
+            temperature=0,
+            streaming=True
+        )
         
-        # Invoke LLM with the passed config (propagates callbacks/streaming)
-        response = await chain.ainvoke({
-            "messages": messages,
-            "context": context
-        }, config=config)
-        
-        # Return new message to be added to state via Annotated[..., add_messages]
-        return {"messages": [response]}
+        self.tavily_tool = None
+        try:
+            if settings.TAVILY_API_KEY and "placeholder" not in settings.TAVILY_API_KEY:
+                from langchain_community.tools.tavily_search import TavilySearchResults
+                self.tavily_tool = TavilySearchResults(
+                    tavily_api_key=settings.TAVILY_API_KEY, 
+                    max_results=3,
+                    search_depth="advanced",
+                    include_images=True,
+                    include_image_descriptions=True
+                )
+        except ImportError:
+            pass
 
-    def _build_graph(self) -> CompiledStateGraph:
-        """Construct the LangGraph workflow."""
-        workflow = StateGraph(AgentState)
+        self.checkpointer = MemorySaver()
         
-        workflow.add_node("agent", self._call_model)
-        workflow.set_entry_point("agent")
-        workflow.add_edge("agent", END)
+        # Load Workflow based on environment variable
+        self.active_workflow = os.getenv("ACTIVE_WORKFLOW", "med_gemma_4b")
+        print(f"AGENT: Loading workflow '{self.active_workflow}'...")
         
-        return workflow.compile()
+        if self.active_workflow == "med_gemma_27b":
+            from app.workflow.med_gemma_27b.graph import build_graph
+        elif self.active_workflow == "med_gemma_4b":
+            from app.workflow.med_gemma_4b.graph import build_graph
+        else:
+            raise ValueError(f"Unknown workflow: {self.active_workflow}")
+            
+        self.graph = build_graph(
+            self.llm, 
+            self.llm_diagnosis, 
+            self.llm_tool_call,
+            self.checkpointer, 
+            self.tavily_tool
+        )
+        
+        if not os.path.exists("output"):
+            os.mkdir("output")
+        try:
+            image = self.graph.get_graph().draw_mermaid_png()
+            with open("output/graph.png", "wb") as f:
+                f.write(image)
+        except Exception:
+            pass
 
-    def get_graph(self) -> CompiledStateGraph:
-        """Get the compiled graph executable."""
+    async def warmup(self):
+        print("AGENT: Starting Comprehensive Warmup...")
+        
+        async def warm_main_llm():
+            try:
+                # Warm up the graph (Thinking Node is usually entry)
+                print("AGENT: Warming up Main Graph (Thinking Node)...")
+                dummy_state = {
+                    "messages": [HumanMessage(content="hi")],
+                    "context": "Warmup context"
+                }
+                config = {"configurable": {"thread_id": "warmup"}}
+                # Just run one step or invoke
+                # We use ainvoke but we need to handle the stream or result.
+                # Since we just want to wake it up, running it is enough.
+                # However, we must be careful not to trigger a long conversation loop.
+                # But ThinkingNode usually returns a plan and stops or goes to next.
+                # Let's just invoke.
+                await self.graph.ainvoke(dummy_state, config=config)
+                print("AGENT: Main Graph Warmup Complete.")
+            except Exception as e:
+                print(f"AGENT: Main Graph Warmup Failed: {e}")
+
+        async def warm_diagnosis_llm():
+            try:
+                print("AGENT: Warming up Diagnosis LLM...")
+                await self.llm_diagnosis.ainvoke("hi")
+                print("AGENT: Diagnosis LLM Warmup Complete.")
+            except Exception as e:
+                print(f"AGENT: Diagnosis LLM Warmup Failed: {e}")
+
+        # Run both warmups in parallel
+        await asyncio.gather(warm_main_llm(), warm_diagnosis_llm())
+        print("AGENT: All Models Warmup Complete.")
+
+    def get_graph(self):
         return self.graph
 
-# Singleton instance
+    @property
+    def is_ready(self):
+        return self.graph is not None and self.llm is not None
+
 agent_service = AgentService()

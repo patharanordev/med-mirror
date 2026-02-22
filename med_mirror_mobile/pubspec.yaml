@@ -26,6 +26,9 @@ dependencies:
   permission_handler: ^11.3.0
   image: ^4.1.3 # Image processing
   vad: ^0.0.7+1
+  uuid: ^4.3.3
+  flutter_markdown: ^0.7.1   # Markdown rendering in carousel content zone
+  metadata_fetch: ^0.4.0     # OG image extraction from search result URLs
 
 dev_dependencies:
   flutter_test:

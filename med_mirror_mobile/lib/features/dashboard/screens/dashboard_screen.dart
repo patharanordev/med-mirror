@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../chat/controllers/voice_controller.dart';
-import '../../../core/state/app_state.dart';
-import '../../../core/services/api_service.dart';
 import '../widgets/camera_overlay_view.dart';
 import '../widgets/badge.dart';
 import '../../chat/widgets/chat_panel.dart';
@@ -22,6 +20,14 @@ class _MainScreenState extends State<MainScreen> {
   bool _isCameraReady = false; // Initial state false until detected
   final CameraOverlayController _cameraController = CameraOverlayController();
   final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
+
+  // Cached GoogleFonts style — computed once, not per build.
+  static final _titleStyle = GoogleFonts.michroma(
+    color: Colors.white,
+    fontSize: 48,
+    fontWeight: FontWeight.w400,
+    height: 0.75,
+  );
 
   @override
   void initState() {
@@ -59,6 +65,8 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Cache size once to avoid repeated MediaQuery lookups during layout.
+    final size = MediaQuery.of(context).size;
     // Row layout for iPad (Landscape)
     // Stack layout for Glassmorphism
     // 1. Camera Background
@@ -94,12 +102,7 @@ class _MainScreenState extends State<MainScreen> {
                   children: [
                     Text(
                       "MedMirror",
-                      style: GoogleFonts.michroma(
-                        color: Colors.white,
-                        fontSize: 48,
-                        fontWeight: FontWeight.w400, // Regular
-                        height: 0.75,
-                      ),
+                      style: _titleStyle,
                     ),
                     const SizedBox(width: 8),
                     const AppBadge(text: "EDGE"),
@@ -167,16 +170,14 @@ class _MainScreenState extends State<MainScreen> {
             right: 20,
             bottom: 20,
             width: 400, // Fixed width
-            height:
-                MediaQuery.of(context).size.height * 0.5, // Half screen height
+            height: size.height * 0.5, // Half screen height
             child:
                 ChatPanel(key: _chatPanelKey, currentContext: _currentContext),
           ),
 
           // 4. Audio Wave Animation (Centered Horizontal, 4/5 Vertical)
           Positioned(
-            top: MediaQuery.of(context).size.height *
-                0.8, // 4/5 of screen height
+            top: size.height * 0.8, // 4/5 of screen height
             left: 0,
             right: 0,
             child: Center(

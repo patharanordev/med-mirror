@@ -26,6 +26,21 @@ export function useMedGemma() {
     const lastContextRef = useRef("No specific detection yet.");
     const lastImageRef = useRef<string | null>(null);
 
+    // Thread ID persistence (one per session/mount)
+    const threadIdRef = useRef<string>("");
+
+    useEffect(() => {
+        if (!threadIdRef.current) {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                threadIdRef.current = crypto.randomUUID();
+            } else {
+                // Fallback for older browsers or non-secure contexts
+                threadIdRef.current = 'thread-' + Math.random().toString(36).substring(2, 15);
+            }
+            console.log("Initialized Thread ID:", threadIdRef.current);
+        }
+    }, []);
+
     // Keep a ref of messages for access inside sendMessage without dependencies
     const messagesRef = useRef<Message[]>(messages);
     useEffect(() => {
@@ -54,9 +69,12 @@ export function useMedGemma() {
             // Clear image after sending (or keep it? Usually keep for context until new scan)
             // Strategy: Keep it until updated. 
 
+            const currentThreadId = threadIdRef.current; // access ref
+
             try {
-                console.log("Sending payload to agent...");
-                const response = await fetch(`${API_AGENT}/chat`, {
+                console.log(`Sending payload to agent (Thread: ${currentThreadId})...`);
+                // Append thread_id to the URL path
+                const response = await fetch(`${API_AGENT}/chat/${currentThreadId}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
@@ -90,13 +108,29 @@ export function useMedGemma() {
                                 if (dataStr === "[DONE]") break;
                                 try {
                                     const data = JSON.parse(dataStr);
-                                    if (data.content) {
-                                        assistantText += data.content;
-                                        setMessages((prev) => {
-                                            const newMsgs = [...prev];
-                                            newMsgs[newMsgs.length - 1].content = assistantText;
-                                            return newMsgs;
-                                        });
+                                    if (data.type === 'text') {
+                                        if (typeof data.content === 'string') {
+                                            assistantText += data.content;
+                                        }
+                                    } else if (data.type === 'interrupt') {
+                                        if (typeof data.content === 'object' && data.content.question) {
+                                            assistantText += data.content.question;
+                                        } else if (typeof data.content === 'string') {
+                                            assistantText += data.content;
+                                        }
+                                    }
+
+                                    setMessages((prev) => {
+                                        const newMsgs = [...prev];
+                                        // Create a new array to trigger re-render
+                                        const updatedLastMsg = { ...newMsgs[newMsgs.length - 1], content: assistantText };
+                                        newMsgs[newMsgs.length - 1] = updatedLastMsg;
+                                        return newMsgs;
+                                    });
+                                    // Handle other types if needed (task, profile_update, tool, debug)
+                                    if (data.type === 'task') {
+                                        // check for 'Thinking...' logic if needed or just ignore
+                                        console.log("Agent Task:", data.content);
                                     }
                                 } catch (e) {
                                     console.error("Parse Error:", e, "Line:", line);

@@ -6,6 +6,15 @@ MedMirror is an intelligent, real-time medical analysis platform that transforms
 
 ---
 
+## Table of Contents
+
+- [Medical Agent](./agent/README.md)
+- [Cross Platform Application](./med_mirror_mobile/README.md)
+- [Skin Detection](./segmentation/README.md)
+- [APIs](./apis/README.md)
+
+---
+
 ## 🌟 Key Features
 
 ### 🩺 **Real-Time Skin Analysis**
@@ -31,19 +40,19 @@ MedMirror is an intelligent, real-time medical analysis platform that transforms
 MedMirror is designed to run seamlessly on different hardware by choosing the best inference path:
 
 ### 🍎 macOS (Apple Silicon)
-- **Model**: `gemma3n:e2b` (Ollama)
+- **Model**: `medgemma-1.5-4b:latest` (Ollama)
 - **STT**: `faster-whisper` (CPU)
 - **Inference Mode**: **CPU-Optimized (Dockerized)**
 - **Service**: Runs via `docker-compose.mac.yml`.
 
 ### 🪟 Windows (NVIDIA GPU)
-- **Model**: `gemma3:4b` (Ollama)
+- **Model**: `medgemma-1.5-4b:latest` (Ollama)
 - **STT**: `faster-whisper` (CUDA/GPU)
 - **Inference Mode**: **NVIDIA RTX 4080 Acceleration**
 - **Service**: Runs via `docker-compose.win.yml` with CUDA 12.2 runtime.
 
 ### 🔧 Configuration via .env
-You can customize the agent language and STT model size in `.env.local` (or your OS-specific env file):
+You can customize the agent language and STT model size in `.env.winos` or `.env.macos`:
 
 ```env
 # Agent Language (th = Thai, en = English)
@@ -60,22 +69,45 @@ STT_MODEL_SIZE=tiny
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
-- **Docker Desktop**
-- **NVIDIA Drivers & Container Toolkit** (Windows only)
-- **Ollama** (Optional for Host-Mac mode)
+- **Ollama**: Must be installed and running in the background. [Download here](https://ollama.com).
+- **Hugging Face Token**: Required for MedGemma (gated model). Create a [Read Token here](https://huggingface.co/settings/tokens).
+- **Docker Desktop**: For running the services.
+- **NVIDIA Drivers & Container Toolkit** (Windows only): For GPU acceleration.
 
-### 2. Pull Gemma Model
-#### **macOS**
-```bash
-ollama pull gemma3n:e2b
-```
+### 2. Download & Install Models
+This step downloads necessary segmentation models and automatically converts/imports the MedGemma model.
 
 #### **Windows**
-```powershell
-ollama pull gemma3:4b
-```
+1. Run the downloader script:
+   ```powershell
+   .\download_models.bat
+   ```
+   *Follow the prompts in the new window (if any) to paste your HF Token.*
 
-### 3. Launching
+#### **macOS / Linux**
+1. Run the downloader script:
+   ```bash
+   ./download_models.sh
+   ```
+   *Follow the prompts.*
+
+> **Note**: This script automatically performs the following for MedGemma:
+> - Downloads weights from Hugging Face
+> - Builds conversion tools (llama.cpp)
+> - **Auto-converts** weights to GGUF format
+> - Quantizes to optimize for performance (Q4_K_M)
+> - Creates the Ollama model `medgemma-1.5-4b` ready for use.
+
+### 3. Verify Installation
+Ensure the model is correctly installed in Ollama:
+```bash
+ollama run medgemma-1.5:4b "Hello, I have a rash on my arm."
+```
+*(You should see a medical-context response)*
+
+
+
+### 4. Launching
 #### **macOS**
 ```bash
 docker-compose -f docker-compose.mac.yml up --build
@@ -135,3 +167,11 @@ python agent/tests/test_streaming.py
 - **Mirror Fix**: Both live preview and captured frames are now horizontally flipped to match user intuition.
 - **VAD Stability**: Fixed `InvalidStateError` race conditions in browser SpeechRecognition for smoother Thai voice input.
 - **Gemma 3 Migration**: Switched to the Gemma 3 family for superior medical text comprehension and multimodal reasoning.
+
+## Contributing
+
+### Tracing
+
+- **LangSmith**: [LangSmith](https://smith.langchain.com/) is a platform for debugging, testing, and monitoring LLM applications. It is used to trace the execution of the agent and to debug any issues that may arise. You can enable tracing by setting the `LANGSMITH_TRACING` environment variable to `true` and the `LANGSMITH_API_KEY` environment variable to your LangSmith API key.
+
+![ex-tracing](./assets/ex-tracing.jpg)
