@@ -107,6 +107,14 @@ class AgentService:
             except Exception as e:
                 print(f"AGENT: Diagnosis LLM Warmup Failed: {e}")
 
+        async def warm_tool_call_llm():
+            try:
+                print("AGENT: Warming up Tool Call LLM...")
+                await self.llm_tool_call.ainvoke("hi")
+                print("AGENT: Tool Call LLM Warmup Complete.")
+            except Exception as e:
+                print(f"AGENT: Tool Call LLM Warmup Failed: {e}")
+
         # Run both warmups in parallel
         await asyncio.gather(warm_main_llm(), warm_diagnosis_llm())
         print("AGENT: All Models Warmup Complete.")

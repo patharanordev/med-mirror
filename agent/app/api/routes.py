@@ -16,6 +16,14 @@ from langgraph.types import Command
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Reuse a single client for efficiency and to follow redirects
+http_client = httpx.AsyncClient(
+    follow_redirects=True,
+    headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+)
+
 @router.get("/")
 @router.get("/health")
 async def root():
@@ -31,13 +39,13 @@ async def proxy_image(url: str = Query(...)):
     Proxy external images to bypass CORS.
     """
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, timeout=10.0)
-            resp.raise_for_status()
-            return Response(
-                content=resp.content, 
-                media_type=resp.headers.get("content-type", "image/jpeg")
-            )
+        resp = await http_client.get(url, timeout=10.0)
+        resp.raise_for_status()
+        return Response(
+            content=resp.content, 
+            media_type=resp.headers.get("content-type", "image/jpeg"),
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
     except Exception as e:
         logger.error(f"Image Proxy failed for {url}: {e}")
         return Response(status_code=404)
@@ -163,8 +171,13 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                         # Debug logging to identify node names and tags
                         logger.info(f"CHAT MSG: Node={node_name}, Tags={metadata.get('tags')}")
 
+                        if node_name == "thinking":
+                            # The 'thinking' node outputs JSON format. We skip streaming the raw JSON characters
+                            # and instead send the fully parsed 'content' when the node finishes ('updates' stream).
+                            continue
+
                         # Nodes that should NOT appear in chat bubble
-                        if node_name in ["thinking", "routing", "definite_diagnosis", "diagnosis_process"]:
+                        if node_name in ["routing", "definite_diagnosis", "diagnosis_process"]:
                             msg_type = "thinking"
                         
                         # Check tags for definite_diagnosis (since it's in a subgraph)
@@ -202,22 +215,22 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                         continue
                     
                     # Handle Node Updates
-                    # 1. Thinking Node - Extract Plan
+                    # 1. Thinking Node - Extract Content
                     if "thinking" in data:
                         output = data["thinking"]
-                        plan = None
+                        content = None
                         if output:
                             # Handle Pydantic V1 (.dict()) or plain dict or object attr
-                            if hasattr(output, 'todo'):
-                                plan = output.todo
+                            if hasattr(output, 'content'):
+                                content = output.content
                             elif isinstance(output, dict):
-                                plan = output.get('todo')
-                                if not plan and 'todo' in output: 
-                                    plan = output['todo']
+                                content = output.get('content')
+                                if not content and 'content' in output: 
+                                    content = output['content']
                         
-                        if plan:
-                             collected_content["plan"].append(json.dumps(plan))
-                             yield f"data: {json.dumps({'type': 'task', 'content': plan})}\n\n"
+                        if content:
+                             collected_content["thinking"].append(json.dumps(content))
+                             yield f"data: {json.dumps({'type': 'thinking', 'content': content})}\n\n"
 
                     # 2. Interview Node - Extract Profile
                     if "interview" in data:
@@ -242,16 +255,17 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
                     if "shopping_search" in data:
                         output = data["shopping_search"]
                         if isinstance(output, dict):
-                            # Process messages as text
-                            messages = output.get("messages", [])
-                            for msg in messages:
-                                content = getattr(msg, 'content', str(msg))
-                                yield f"data: {json.dumps({'type': 'text', 'content': content})}\n\n"
+                            # (Messages are already streamed automatically by the 'messages' stream mode)
                             
                             # Process search results
-                            results = output.get("search_results", [])
+                            results = output.get("search_results", "")
                             if results:
-                                yield f"data: {json.dumps({'type': 'search_result', 'content': results})}\n\n"
+                                # Ensure we are passing a string to match the frontend regex parsing
+                                if hasattr(results, 'content'):
+                                    results_str = results.content
+                                else:
+                                    results_str = str(results)
+                                yield f"data: {json.dumps({'type': 'search_result', 'content': results_str})}\n\n"
                             else:
                                 yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
 

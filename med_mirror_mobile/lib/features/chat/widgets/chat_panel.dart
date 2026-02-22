@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/message.dart';
@@ -97,15 +98,10 @@ class ChatPanelState extends State<ChatPanel> {
           context: widget.currentContext,
           runId: _currentRunId);
 
-      // Reset runId after use, assuming new turn clears previous interrupt state?
-      // Actually, if we are answering an interrupt, we send the ID.
-      // If we are starting new chat, ID is null.
-      // Agent handles validation.
       _currentRunId = null;
 
-      // Holds an interrupt received mid-stream;
-      // flushed as a new bubble after streaming completes.
       Map<String, dynamic>? pendingInterrupt;
+      bool isFirstThinkingChunk = true;
 
       await for (final chunk in stream) {
         if (chunk is String) {
@@ -123,16 +119,105 @@ class ChatPanelState extends State<ChatPanel> {
           if (chunkType == 'interrupt') {
             final question = chunk['question'] ?? "";
             _currentRunId = chunk['run_id'];
-            // Buffer the interrupt — do NOT touch the message list yet.
             pendingInterrupt = {'question': question};
             print("ChatPanel: Buffered interrupt (runId: $_currentRunId)");
+          } else if (chunkType == 'thinking') {
+            final content = chunk['content'] as String? ?? "";
+            if (mounted && content.isNotEmpty) {
+              final appState = context.read<AppState>();
+              bool shouldExpand = appState.thinkingText.isEmpty;
+
+              String textToAdd = content;
+              if (isFirstThinkingChunk) {
+                if (appState.thinkingText.isNotEmpty) {
+                  textToAdd = "\n\n$content";
+                }
+                isFirstThinkingChunk = false;
+              }
+
+              appState.updateThinking(textToAdd,
+                  expanded: shouldExpand ? true : null);
+            }
           } else if (chunkType == 'search_result') {
-            final rawItems = chunk['content'] as List? ?? [];
+            final contentStr = chunk['content']?.toString() ?? "";
+            print("--- CHAT_PANEL SEARCH_RESULT PAYLOAD ---");
+            print("Length: ${contentStr.length}");
+            print(
+                "Content Snippet: ${contentStr.substring(0, contentStr.length > 100 ? 100 : contentStr.length)}...");
+
+            List<dynamic> rawItems = [];
+
+            try {
+              String textToParse = contentStr.trim();
+              if (textToParse.startsWith('```json')) {
+                textToParse = textToParse.substring(7);
+              } else if (textToParse.startsWith('```')) {
+                textToParse = textToParse.substring(3);
+              }
+              if (textToParse.endsWith('```')) {
+                textToParse = textToParse.substring(0, textToParse.length - 3);
+              }
+              textToParse = textToParse.trim();
+
+              final decoded = jsonDecode(textToParse);
+              if (decoded is List) {
+                rawItems = decoded;
+                print("Parsed direct List!");
+              } else if (decoded is Map<String, dynamic>) {
+                if (decoded.containsKey('recommendations') &&
+                    decoded['recommendations'] is List) {
+                  rawItems = decoded['recommendations'] as List<dynamic>;
+                  print("Parsed Map with 'recommendations' list!");
+                } else if (decoded.containsKey('items') &&
+                    decoded['items'] is List) {
+                  rawItems = decoded['items'] as List<dynamic>;
+                  print("Parsed Map with 'items' list!");
+                }
+              }
+            } catch (e) {
+              print(
+                  "ChatPanel: Direct JSON Decode failed, trying Regex fallback: $e");
+              try {
+                // Try to find a JSON array
+                final matchArray =
+                    RegExp(r'\[.*\]', dotAll: true).firstMatch(contentStr);
+                if (matchArray != null) {
+                  print("Found matchArray!");
+                  rawItems = jsonDecode(matchArray.group(0)!) as List<dynamic>;
+                } else {
+                  // Try to find a JSON object
+                  final matchDict =
+                      RegExp(r'\{.*\}', dotAll: true).firstMatch(contentStr);
+                  if (matchDict != null) {
+                    print("Found matchDict!");
+                    final parsedDict =
+                        jsonDecode(matchDict.group(0)!) as Map<String, dynamic>;
+                    if (parsedDict.containsKey('recommendations') &&
+                        parsedDict['recommendations'] is List) {
+                      rawItems = parsedDict['recommendations'] as List<dynamic>;
+                    }
+                  } else {
+                    print(
+                        "No JSON structure matched in search_result content.");
+                  }
+                }
+              } catch (e2) {
+                print(
+                    "ChatPanel: Error parsing search_result JSON with Regex: $e2");
+              }
+            }
+
+            print("Parsed rawItems count: ${rawItems.length}");
+
             final items = rawItems
                 .whereType<Map<String, dynamic>>()
                 .map(SearchResultItem.fromJson)
                 .toList();
+
+            print("Successfully instantiated items count: ${items.length}");
+
             if (mounted && items.isNotEmpty) {
+              print("Showing search results carousel!");
               _showSearchResults(items);
             }
           }
@@ -290,7 +375,7 @@ class ChatPanelState extends State<ChatPanel> {
                       final mockItems = [
                         SearchResultItem.fromJson({
                           'product_image':
-                              'https://www.watsons.co.th/images/eye-relief-cream.jpg',
+                              'https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=800&auto=format&fit=crop',
                           'description':
                               'ครีมช่วยลดอาการตาบวมและสีเข้มรอบตา ใช้ได้ดีสำหรับผู้ที่นั่งทำงานหน้าจอเป็นเวลานาน',
                           'price': '250 บาท',
@@ -299,7 +384,7 @@ class ChatPanelState extends State<ChatPanel> {
                         }),
                         SearchResultItem.fromJson({
                           'product_image':
-                              'https://www.sephora.co.th/images/dark-circle-corrector.jpg',
+                              'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=80&w=800&auto=format&fit=crop',
                           'description':
                               'ครีมปรับสีและลดอาการตาบวม ช่วยให้ผิวรอบตาสดใสขึ้น',
                           'price': '320 บาท',
@@ -308,7 +393,7 @@ class ChatPanelState extends State<ChatPanel> {
                         }),
                         SearchResultItem.fromJson({
                           'product_image':
-                              'https://www.boots.co.th/images/eye-gel.jpg',
+                              'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?q=80&w=800&auto=format&fit=crop',
                           'description':
                               'ครีมเย็นช่วยลดอาการบวมและร้อนรอบตา ใช้ได้ดีหลังทำงานหน้าจอ',
                           'price': '180 บาท',

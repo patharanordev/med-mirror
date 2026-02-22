@@ -153,10 +153,11 @@ class EvaluationNode:
 </CurrentKnowledge>
 
 <output_format priority="CRITICAL">
-  - Return ONLY a raw JSON object string.
+  - Return ONLY a valid JSON object string representing the updated CurrentKnowledge.
+  - DO NOT output any conversational text, explanations, or greetings whatsoever.
+  - NEVER ASK QUESTIONS. You are an extractor, not the chat agent. If the user asks a question or there is missing info, just output the JSON with the available data.
   - DO NOT wrap the JSON in markdown code blocks like ```json ... ```.
-  - DO NOT add any conversational text, explanations, or greetings before or after the JSON.
-  - If you output anything other than exactly the JSON object, the system will break.
+  - If you output anything other than exactly the JSON object, the system will crash.
   <schema>{format_instructions}</schema>
 </output_format>
 """
@@ -179,8 +180,32 @@ class EvaluationNode:
             })
             return res
         except Exception as e:
-            print(f"Extraction Error: {e}")
-            return {}
+            # Fallback: The LLM might have outputted conversational text wrapping the JSON
+            print(f"Extraction Error (Trying Fallback): {e}")
+            try:
+                # We need to invoke just the prompt|LLM part to get the raw text
+                raw_chain = prompt | self.llm
+                raw_msg = await raw_chain.ainvoke({
+                    "chat_history": chat_history, 
+                    "current_data": json.dumps(current_data, ensure_ascii=False),
+                    "format_instructions": parser.get_format_instructions(),
+                    "keys_string": keys_string
+                })
+                raw_text = raw_msg.content
+                import re
+                
+                # Try to find JSON block
+                match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+                if match:
+                    # Clean up common markdown formatting issues within the match if needed
+                    json_str = match.group(1).strip()
+                    return json.loads(json_str)
+                else:
+                    print(f"Fallback didn't find JSON in: {raw_text}")
+                    return current_data # Return the existing data instead of empty dict if parsing completely fails to avoid wiping out state
+            except Exception as e2:
+                print(f"Fallback Extraction Error: {e2}")
+            return current_data
 
     def _format_patient_info(self, info):
         lines = []

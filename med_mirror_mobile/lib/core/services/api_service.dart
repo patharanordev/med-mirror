@@ -109,13 +109,10 @@ class ApiService {
                   yield content;
                 }
               } else if (type == 'search_result') {
-                // content is a List of search result dicts
-                if (content is List) {
-                  yield {
-                    'type': 'search_result',
-                    'items': content,
-                  };
-                }
+                yield {
+                  'type': 'search_result',
+                  'content': content,
+                };
               } else if (type == 'interrupt') {
                 if (content is Map) {
                   print("DEBUG: Yielding Interrupt Map");
@@ -134,6 +131,13 @@ class ApiService {
                 } else {
                   print(
                       "DEBUG: Content is NOT Map or String: ${content.runtimeType} -> $content");
+                }
+              } else if (type == 'thinking') {
+                if (content is String) {
+                  yield {
+                    'type': 'thinking',
+                    'content': content,
+                  };
                 }
               }
               // Ignore 'task', 'profile_update', 'tool', 'debug' for now

@@ -6,7 +6,7 @@ from typing import Literal
 
 # Local model for 4b workflow (simpler, no todo)
 class ThinkingResultSimple(BaseModelV1):
-    analysis: str = FieldV1(description="Brief analysis of intent.")
+    content: str = FieldV1(description="Brief analysis of intent.")
     next_step: Literal['general_chat', 'diagnosis', 'shopping_search']
     language: str = FieldV1(description="Detected language of the user (e.g., 'English', 'Thai', 'Japanese'). Default to 'English'.")
     shopping_intent: bool = FieldV1(default=False, description="True if user explicitly asks for products, medicine, cream, or treatment.")
@@ -61,7 +61,8 @@ class ThinkingNode:
             
             # result_dict should match ThinkingResultSimple
             return {
-                "thinking_process": result_dict.get("analysis", ""),
+                "thinking_process": result_dict.get("content", ""),
+                "content": result_dict.get("content", ""),
                 "next_step": result_dict.get("next_step", "general_chat"),
                 "language": result_dict.get("language", "English"),
                 "shopping_intent": result_dict.get("shopping_intent", False)

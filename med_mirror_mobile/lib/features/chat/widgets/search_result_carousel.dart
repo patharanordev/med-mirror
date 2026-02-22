@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../models/search_result_item.dart';
 
@@ -148,8 +149,8 @@ class _CarouselHeader extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '🛍️ Product Recommendations',
-            style: TextStyle(
+            'Product Recommendations',
+            style: GoogleFonts.notoSansThai(
               color: Colors.white,
               fontSize: _sp(12, size),
               fontWeight: FontWeight.w600,
@@ -218,23 +219,23 @@ class _SearchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
 
-    final priceStyle = TextStyle(
+    final priceStyle = GoogleFonts.notoSansThai(
       color: Colors.cyanAccent,
       fontSize: _sp(13, size),
       fontWeight: FontWeight.bold,
     );
-    final refStyle = TextStyle(
+    final refStyle = GoogleFonts.notoSansThai(
       color: Colors.white38,
       fontSize: _sp(9, size),
       decoration: TextDecoration.underline,
     );
     final mdStyleSheet = MarkdownStyleSheet(
-      p: TextStyle(
+      p: GoogleFonts.notoSansThai(
         color: const Color(0xCCFFFFFF),
         fontSize: _sp(11, size),
         height: 1.5,
       ),
-      strong: TextStyle(
+      strong: GoogleFonts.notoSansThai(
         color: Colors.white,
         fontWeight: FontWeight.w700,
         fontSize: _sp(11, size),
@@ -257,6 +258,10 @@ class _SearchCard extends StatelessWidget {
                       width: double.infinity,
                       fit: BoxFit.cover,
                       cacheWidth: 800,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return _buildPlaceholder();
+                      },
                       errorBuilder: (_, __, ___) => _buildPlaceholder(),
                     )
                   : _buildPlaceholder(),

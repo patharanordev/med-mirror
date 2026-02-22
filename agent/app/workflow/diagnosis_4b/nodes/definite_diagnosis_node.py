@@ -50,15 +50,11 @@ class DefiniteDiagnosisNode:
         try:
             chain = prompt | self.llm
             
-            # Explicitly drop callbacks to prevent streaming tokens to the frontend
-            config_silent = config.copy()
-            if "callbacks" in config_silent:
-                del config_silent["callbacks"]
-                
-             # Add tag just in case for other tools
-            config_silent["tags"] = ["definite_diagnosis"]
+            # Allow streaming, add tag for routes.py to classify it as 'thinking'
+            config_streaming = config.copy()
+            config_streaming["tags"] = ["definite_diagnosis"]
             
-            msg = await chain.ainvoke(inputs, config=config_silent)
+            msg = await chain.ainvoke(inputs, config=config_streaming)
             raw_content = msg.content
             
             # Simply store the raw content as the definite diagnosis

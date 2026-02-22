@@ -6,6 +6,8 @@ import '../widgets/camera_overlay_view.dart';
 import '../widgets/badge.dart';
 import '../../chat/widgets/chat_panel.dart';
 import '../../chat/widgets/audio_wave.dart';
+import '../../../core/state/app_state.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -112,6 +114,34 @@ class _MainScreenState extends State<MainScreen> {
                 // Right Side Controls: Camera + Mic
                 Row(
                   children: [
+                    // Brain Button (Thinking Panel Toggle)
+                    Consumer<AppState>(builder: (context, appState, _) {
+                      return Container(
+                        margin: const EdgeInsets.only(right: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: appState.isThinkingExpanded
+                                ? Colors.cyanAccent
+                                : Colors.white24,
+                            width: 2,
+                          ),
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.psychology,
+                            color: appState.isThinkingExpanded
+                                ? Colors.cyanAccent
+                                : Colors.white54,
+                          ),
+                          onPressed: () => appState.setThinkingExpanded(
+                              !appState.isThinkingExpanded),
+                          tooltip: "Thinking Process",
+                        ),
+                      );
+                    }),
+
                     // Camera Button (Moved to top right)
                     Container(
                       decoration: BoxDecoration(
@@ -165,7 +195,47 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
 
-          // 3. Chat Panel (Bottom Right, Half Height)
+          // 3. Thinking Panel (Overlay near header icons, faint text)
+          Positioned(
+            right: 20,
+            top:
+                100, // Just below the header (which is at top: 30 + ~50 height)
+            width: 400,
+            child: Consumer<AppState>(
+              builder: (context, appState, _) {
+                if (!appState.isThinkingExpanded ||
+                    appState.thinkingText.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: size.height * 0.2, // Max 20% of screen height
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors
+                          .transparent, // Reverted to transparent as requested
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: SingleChildScrollView(
+                      reverse: true, // Auto-scroll to bottom of thinking
+                      child: Text(
+                        appState.thinkingText,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 15,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ),
+                ).animate().fadeIn().slideY(begin: 0.1, end: 0);
+              },
+            ),
+          ),
+
+          // 4. Chat Panel (Bottom Right, Half Height)
           Positioned(
             right: 20,
             bottom: 20,
