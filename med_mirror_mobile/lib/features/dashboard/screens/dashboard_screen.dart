@@ -6,6 +6,7 @@ import '../widgets/camera_overlay_view.dart';
 import '../widgets/badge.dart';
 import '../../chat/widgets/chat_panel.dart';
 import '../../chat/widgets/audio_wave.dart';
+import '../../settings/screens/config_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -164,6 +165,28 @@ class _MainScreenState extends State<MainScreen> {
                                 : Colors.white54),
                       );
                     }),
+
+                    const SizedBox(width: 16),
+
+                    // Settings Button
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.settings, color: Colors.white),
+                        tooltip: 'Settings',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ConfigScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ],

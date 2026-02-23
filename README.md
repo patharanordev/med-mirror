@@ -133,11 +133,15 @@ docker-compose -f docker-compose.win.yml up --build
 - **Hybrid Streaming**: Supports both token-by-token streaming and bulk fallback.
 - **Multimodal Handler**: Automatically formats text + image instructions for the Vision LLM.
 
-### 3. Skin Segmentation (SegFormer)
+### 3. Local STT Service (`faster-whisper`)
+- **Privacy First**: All audio processed locally within the container.
+- **Latency Optimized**: Using `tiny.en` model + beam size 1 for sub-200ms transcription.
+
+### 4. Skin Segmentation (SegFormer)
 - **Real-time Detection**: Uses a Transformers-based SegFormer model to identify skin areas at 0.5 FPS - 1 FPS.
 - **Persistent Cache**: Models are cached to ensure fast restarts and offline capability.
 
-### 4. LLM Backend (Ollama)
+### 5. LLM Backend (Ollama)
 - **Unified API**: All agents communicate via the Ollama OpenAI-compatibility layer (`/v1`).
 - **Flexible Models**: Easily swappable models (Gemma 3, MedGemma) via environment variables.
 
