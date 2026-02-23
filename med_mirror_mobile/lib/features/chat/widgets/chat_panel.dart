@@ -11,7 +11,15 @@ import 'package:uuid/uuid.dart';
 
 class ChatPanel extends StatefulWidget {
   final String? currentContext; // Skin analysis context
-  const ChatPanel({super.key, this.currentContext});
+  final String? pendingVoiceMessage;
+  final VoidCallback? onVoiceMessageSent;
+
+  const ChatPanel({
+    super.key,
+    this.currentContext,
+    this.pendingVoiceMessage,
+    this.onVoiceMessageSent,
+  });
 
   @override
   State<ChatPanel> createState() => ChatPanelState();
@@ -35,14 +43,31 @@ class ChatPanelState extends State<ChatPanel> {
   @override
   void initState() {
     super.initState();
-    // Callback registration moved to MainScreen to avoid stale references
+    // Check if there is an initial voice message pending
+    _checkPendingVoiceMessage();
   }
 
-  /// Public method for MainScreen to send messages via GlobalKey
-  void sendVoiceMessage(String text) {
-    print("ChatPanel: sendVoiceMessage called with '$text'. Mounted: $mounted");
-    if (mounted && text.isNotEmpty) {
-      _sendMessage(manualText: text);
+  @override
+  void didUpdateWidget(ChatPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingVoiceMessage != oldWidget.pendingVoiceMessage) {
+      _checkPendingVoiceMessage();
+    }
+  }
+
+  void _checkPendingVoiceMessage() {
+    if (widget.pendingVoiceMessage != null &&
+        widget.pendingVoiceMessage!.isNotEmpty) {
+      print(
+          "ChatPanel: Processing pendingVoiceMessage '${widget.pendingVoiceMessage}'");
+      _sendMessage(manualText: widget.pendingVoiceMessage);
+      // Notify parent that we consumed the message
+      if (widget.onVoiceMessageSent != null) {
+        // Schedule it post frame to avoid build phase setState errors
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          widget.onVoiceMessageSent!();
+        });
+      }
     }
   }
 

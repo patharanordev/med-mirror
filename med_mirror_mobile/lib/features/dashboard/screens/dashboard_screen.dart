@@ -19,7 +19,8 @@ class _MainScreenState extends State<MainScreen> {
   double _skinVal = 0;
   bool _isCameraReady = false; // Initial state false until detected
   final CameraOverlayController _cameraController = CameraOverlayController();
-  final GlobalKey<ChatPanelState> _chatPanelKey = GlobalKey<ChatPanelState>();
+  // Use a string to trigger message rather than GlobalKey
+  String? _pendingVoiceMessage;
 
   // Cached GoogleFonts style — computed once, not per build.
   static final _titleStyle = GoogleFonts.michroma(
@@ -38,10 +39,14 @@ class _MainScreenState extends State<MainScreen> {
       voiceController.setAutoMode(true);
       voiceController.startRecording();
 
-      // Register callback for voice-to-text, routing to ChatPanel via GlobalKey
+      // Register callback for voice-to-text, routing to ChatPanel
       voiceController.setTextCallback((text) {
         print("MainScreen: Voice callback received '$text'");
-        _chatPanelKey.currentState?.sendVoiceMessage(text);
+        if (mounted) {
+          setState(() {
+            _pendingVoiceMessage = text;
+          });
+        }
       });
     });
   }
@@ -171,8 +176,18 @@ class _MainScreenState extends State<MainScreen> {
             bottom: 20,
             width: 400, // Fixed width
             height: size.height * 0.5, // Half screen height
-            child:
-                ChatPanel(key: _chatPanelKey, currentContext: _currentContext),
+            child: ChatPanel(
+              currentContext: _currentContext,
+              pendingVoiceMessage: _pendingVoiceMessage,
+              onVoiceMessageSent: () {
+                // Clear the pending message once it's captured
+                if (mounted) {
+                  setState(() {
+                    _pendingVoiceMessage = null;
+                  });
+                }
+              },
+            ),
           ),
 
           // 4. Audio Wave Animation (Centered Horizontal, 4/5 Vertical)

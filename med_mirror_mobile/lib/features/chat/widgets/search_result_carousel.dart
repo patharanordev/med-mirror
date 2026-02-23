@@ -8,8 +8,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:http/http.dart' as http;
 
+import '../data/og_image_service.dart';
 import '../models/search_result_item.dart';
 
 /// Scale [base] font size proportionally to the screen's shortest side.
@@ -234,6 +234,7 @@ class _SearchCardState extends State<_SearchCard> {
     if (widget.item.productImage.isNotEmpty) {
       _resolvedImageUrl = widget.item.productImage;
     } else {
+      // Don't await, let it fetch in background and update via setState
       _fetchFallbackImage();
     }
   }
@@ -259,58 +260,20 @@ class _SearchCardState extends State<_SearchCard> {
     if (mounted) setState(() => _isLoadingFallback = true);
 
     try {
-      final uri = Uri.parse(widget.item.ref);
+      final imageService = const OgImageService();
+      // Use the proxy to avoid CORS on web while extracting OG tags
+      final proxyUrl =
+          '${widget.baseUrl}/proxy-image?url=${Uri.encodeComponent(widget.item.ref)}';
+      final imageUrl = await imageService.fetchOgImageUrl(proxyUrl);
 
-      // 5-second timeout to prevent stalling the UI
-      final response = await http.get(uri).timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => http.Response('Error', 408),
-          );
-
-      if (response.statusCode == 200) {
-        final html = response.body;
-
-        var match = RegExp(r'<meta[^>]*property=["' +
-                    "'" +
-                    r']og:image["' +
-                    "'" +
-                    r'][^>]*content=["' +
-                    "'" +
-                    r']([^"' "'" ']+)')
-                .firstMatch(html) ??
-            RegExp(r'<meta[^>]*content=["' +
-                    "'" +
-                    r']([^"' "'" ']+)[^>]*property=["' +
-                    "'" +
-                    r']og:image')
-                .firstMatch(html) ??
-            RegExp(r'<meta[^>]*name=["' +
-                    "'" +
-                    r']twitter:image["' +
-                    "'" +
-                    r'][^>]*content=["' +
-                    "'" +
-                    r']([^"' "'" ']+)')
-                .firstMatch(html);
-
-        if (match != null && match.groupCount >= 1) {
-          final imageUrl = match.group(1);
-          if (imageUrl != null && imageUrl.isNotEmpty) {
-            String finalUrl = imageUrl;
-            if (imageUrl.startsWith('/')) {
-              final uri = Uri.parse(widget.item.ref);
-              finalUrl = '${uri.scheme}://${uri.host}$imageUrl';
-            }
-
-            if (mounted) {
-              setState(() {
-                _resolvedImageUrl = finalUrl;
-                _isLoadingFallback = false;
-              });
-            }
-            return;
-          }
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _resolvedImageUrl = imageUrl;
+            _isLoadingFallback = false;
+          });
         }
+        return;
       }
     } catch (e) {
       print("Fallback extract error: $e");

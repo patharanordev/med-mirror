@@ -1,4 +1,4 @@
-# MedMirror: Multimodal Medical AI Mirror
+# MedMirror — Edge-Powered Personal Health
 
 ![idea](./assets/idea.png)
 
@@ -123,25 +123,21 @@ docker-compose -f docker-compose.win.yml up --build
 
 ## 🛠 Enhanced Architecture
 
-### 1. Frontend (Next.js 15)
-- **Smart Proxy (`/api/proxy`)**: New internal proxy routing handles all CORS and container networking seamlessly.
-- **System Status Hook**: Real-time polling of backend health endpoints (`/health`).
-- **Stream Buffer**: Robust parsing logic handles fragmented SSE packets from the LLM.
+### 1. Frontend (Flutter Cross-Platform)
+- **Multi-Platform**: Built with Flutter (`med_mirror_mobile`) for cross-platform support. It runs seamlessly on Chrome (`fvm flutter run -d chrome`) and iOS via Xcode. (Android has not been tested yet).
+- **Robust VAD**: Integrates Silero VAD directly in the app for accurate voice activity detection.
+- **Required Assets**: Before running the app, ensure you download the necessary mobile app assets from the [v0.0.1-mobileapp_assets release](https://github.com/patharanordev/med-mirror/releases/tag/v0.0.1-mobileapp_assets).
 
 ### 2. Medical Agent (FastAPI + LangGraph)
 - **Stateful Graph**: Manages conversation history, context, and image inputs.
 - **Hybrid Streaming**: Supports both token-by-token streaming and bulk fallback.
 - **Multimodal Handler**: Automatically formats text + image instructions for the Vision LLM.
 
-### 3. Local STT Service (`faster-whisper`)
-- **Privacy First**: All audio processed locally within the container.
-- **Latency Optimized**: Using `tiny.en` model + beam size 1 for sub-200ms transcription.
-
-### 4. Skin Segmentation (SegFormer)
+### 3. Skin Segmentation (SegFormer)
 - **Real-time Detection**: Uses a Transformers-based SegFormer model to identify skin areas at 0.5 FPS - 1 FPS.
 - **Persistent Cache**: Models are cached to ensure fast restarts and offline capability.
 
-### 5. LLM Backend (Ollama)
+### 4. LLM Backend (Ollama)
 - **Unified API**: All agents communicate via the Ollama OpenAI-compatibility layer (`/v1`).
 - **Flexible Models**: Easily swappable models (Gemma 3, MedGemma) via environment variables.
 
@@ -159,13 +155,11 @@ python agent/tests/test_streaming.py
 
 ### Recent Fixes
 - **Resilience**: Fixed "infinite typing" by implementing callback config propagation in LangGraph.
-- **Fix**: Resolved `404 Not Found` proxy errors by aliasing `/health`.
 - **UI**: Added animated status tray (Mic, Ear, Brain, Eye).
 - **Docker**: Split builds for optimized Windows (CUDA) vs Mac (CPU) images.
 
 ### Previous Improvements
 - **Mirror Fix**: Both live preview and captured frames are now horizontally flipped to match user intuition.
-- **VAD Stability**: Fixed `InvalidStateError` race conditions in browser SpeechRecognition for smoother Thai voice input.
 - **Gemma 3 Migration**: Switched to the Gemma 3 family for superior medical text comprehension and multimodal reasoning.
 
 ## Contributing
