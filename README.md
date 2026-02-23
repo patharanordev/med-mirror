@@ -177,16 +177,28 @@ For iPad:
 fvm flutter run -d YOUR_DEVICE_ID_OR_NAME
 ```
 
-In case you didn't have any device, please try on web instead:
+Don't forget to allow local network in your iPad settings:
 
-```bash
-fvm flutter run -d chrome
-```
+| Before | After |
+| --- | --- |
+| ![before](./assets/before-allow-local-network.PNG) | ![after](./assets/after-allow-local-network.PNG) |
 
-Then set IP address of your machine that run `agent` service (same network) to your client (web/iPad/etc...):
 
-![start-flutter-web](./assets/start-flutter-web.jpg)
 
+Enjoy!!!
+
+> ---
+> In case you didn't have any device, please try on web instead:
+>
+> ```sh
+> fvm flutter run -d chrome
+> ```
+>
+> Then set IP address of your machine that run `agent` service (same network) to your client (web/iPad/etc...):
+>
+> ![start-flutter-web](./assets/start-flutter-web.jpg)
+>
+> ---
 
 ---
 
