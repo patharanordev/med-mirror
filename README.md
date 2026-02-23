@@ -51,17 +51,31 @@ MedMirror is designed to run seamlessly on different hardware by choosing the be
 - **Inference Mode**: **NVIDIA RTX 4080 Acceleration**
 - **Service**: Runs via `docker-compose.win.yml` with CUDA 12.2 runtime.
 
-### 🔧 Configuration via .env
+### 🔧 Configuration via .env in `agent` folder
 You can customize the agent language and STT model size in `.env.winos` or `.env.macos`:
 
 ```env
 # Agent Language (th = Thai, en = English)
 AGENT_LANGUAGE=th
+```
 
+Accuracy of STT model:
+
+```env
 # Whisper STT Model Size 
 # Options: tiny, tiny.en, base, small, medium, large-v3
 # WARNING: 'large-v3' is approx 3GB. Initial download will take time but is cached locally.
 STT_MODEL_SIZE=tiny
+```
+
+Accuracy of definite diagnosis:
+
+- `med_gemma_4b`: 4B for small edge computing
+- `med_gemma_27b`: 27B for high accuracy
+
+```env
+# Choose workflow that match with your device
+ACTIVE_WORKFLOW=med_gemma_4b
 ```
 
 ---
@@ -98,6 +112,24 @@ This step downloads necessary segmentation models and automatically converts/imp
 > - Quantizes to optimize for performance (Q4_K_M)
 > - Creates the Ollama model `medgemma-1.5-4b` ready for use.
 
+#### **Mobile App Assets**
+
+Download the mobile app assets from the [v0.0.1-mobileapp_assets release](https://github.com/patharanordev/med-mirror/releases/tag/v0.0.1-mobileapp_assets).
+
+Please download assets below then copy/paste to `med-mirror/med_mirror_mobile/assets`.
+
+Finally should look like this:
+
+```sh
+├───images
+└───models
+    └───vad
+         ├───ort-wasm-simd-threaded.mjs
+         ├───ort-wasm-simd-threaded.wasm
+         ├───ort.wasm.min.js
+         └───silero_vad_v5.onnx
+```
+
 ### 3. Verify Installation
 Ensure the model is correctly installed in Ollama:
 ```bash
@@ -108,16 +140,53 @@ ollama run medgemma-1.5:4b "Hello, I have a rash on my arm."
 
 
 ### 4. Launching
-#### **macOS**
+
+#### Backend
+
+macOS:
+
 ```bash
 docker-compose -f docker-compose.mac.yml up --build
 ```
 
-#### **Windows**
+*(Or use provided `start_mac.sh` scripts)*
+
+Windows:
+
 ```powershell
 docker-compose -f docker-compose.win.yml up --build
 ```
-*(Or use provided `start.bat` / `start.sh` scripts)*
+
+![start-agent-on-winos](./assets/start-agent-winos.jpg)
+
+*(Or use provided `start_windows.bat` scripts)*
+
+#### Frontend
+
+> ---
+> In `med_mirror_mobile` directory, install dependencies:
+>
+> ```bash
+> sh refresh-ios.sh
+> ```
+> ---
+
+For iPad:
+
+```bash
+fvm flutter run -d YOUR_DEVICE_ID_OR_NAME
+```
+
+In case you didn't have any device, please try on web instead:
+
+```bash
+fvm flutter run -d chrome
+```
+
+Then set IP address of your machine that run `agent` service (same network) to your client (web/iPad/etc...):
+
+![start-flutter-web](./assets/start-flutter-web.jpg)
+
 
 ---
 
