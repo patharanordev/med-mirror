@@ -1,6 +1,6 @@
 services:
   # ---------------------------------------------------------
-  # 1. Frontend: The Web Interface (Dockerized Next.js)
+  # 1. Frontend: The Web Interface (deprecated)
   # ---------------------------------------------------------
   frontend:
     build:

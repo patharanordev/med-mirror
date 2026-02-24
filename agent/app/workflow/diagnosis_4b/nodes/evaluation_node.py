@@ -122,19 +122,12 @@ class EvaluationNode:
     - If the user's reply is completely unrelated to a field, keep that field as "__MISSING__".
   </rule>
 
-  <rule id="3" name="TEMPORAL REASONING — TIME DEDUCTION">
-    - You MUST calculate and deduce time durations if the user gives indirect temporal clues.
-    - Example 1: If AI asks "Do you get enough sleep?" and User replies "I work 14 hours a day", calculate: 24h - 14h = 10h remaining. Subtracting prep/commute time implies actual sleep is much less (e.g., ~6 hours). Extract this as: "lifestyle_and_sleep": "Works 14 hrs/day, deduced ~6 hrs sleep max".
-    - Example 2: If the user says "Since yesterday morning" and today is afternoon, calculate elapsed time (e.g., "duration": "approx 30 hours").
-    - Perform mathematical reasoning on hours/days before updating the fields.
-  </rule>
-
-  <rule id="4" name="DEDUPLICATION AND PERSISTENCE">
+  <rule id="3" name="DEDUPLICATION AND PERSISTENCE">
     - If a field in CurrentKnowledge already has a value (other than "__MISSING__"), do not overwrite it unless the user provides a direct update or correction.
     - Fields not mentioned in the current turn or history must remain "__MISSING__".
   </rule>
 
-  <rule id="5" name="NO HALLUCINATION">
+  <rule id="4" name="NO HALLUCINATION">
     - Use ONLY the keys provided in AllowedKeys.
     - Use the exact string "__MISSING__" for any data not yet provided.
   </rule>

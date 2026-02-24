@@ -18,3 +18,11 @@ client/tsc_errors.txt
 
 # FVM Version Cache
 .fvm/
+
+# macos
+.DS_Store
+
+# others
+med_mirror_mobile/.dart_tool/*
+med_mirror_mobile/.flutter-plugins-dependencies
+*_log*.txt
