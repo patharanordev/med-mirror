@@ -8,18 +8,24 @@ A Flutter-based native client for the MedMirror system. Designed for iPad to pro
 -   **Real-time Segmentation**: Sends camera frames to the backend and overlays the mask result.
 -   **Voice Chat**: Hands-free interaction using native Voice Activity Detection (VAD) and Speech-to-Text.
 -   **Configurable Host**: Easily connect to your main PC running the Docker services.
+-   **Product Search & Recommendations**: Dynamic animated carousel UI to pop up interactive product cards using structured backend responses.
+-   **Open Graph (OG) Unfurling**: Rich preview images automatically fetched for product links.
+-   **Audio Visualizer**: Custom animated waveform visualizing the user's voice during recording.
+-   **Rich Chat**: Markdown rendering for agent responses.
 
 ## Architecture
 
-The application is built using the **MVVM-like** pattern (Model-View-Provider):
+The application is built using a **Feature-First Architecture** combined with a Model-View-ViewModel (MVVM) approach:
 
--   **`lib/main.dart`**: Entry point and Config/Main screen routing.
--   **`lib/providers/app_state.dart`**: Manage global state (Host IP, Config status).
--   **`lib/controllers/voice_controller.dart`**: Handles microphone permissions, VAD logic, and audio recording.
--   **`lib/services/api_service.dart`**: Handles all communication with the Backend (Segmentation, Chat, STT).
--   **`lib/widgets/`**: Reusable UI components:
-    -   `CameraOverlayView`: Handle camera stream and segmentation loop.
-    -   `ChatPanel`: The sidebar chat interface.
+-   **`lib/core/`**: Core utilities, global state management, and API services (`api_service.dart`, `app_state.dart`).
+-   **`lib/features/chat/`**: All chat-related components, including:
+    -   `controllers/`: Handlers for microphone, VAD, and recording (`voice_controller.dart`).
+    -   `data/` & `domain/`: Repositories and services (e.g., OG image extraction).
+    -   `models/`: Data classes for messages and search results.
+    -   `presentation/` & `widgets/`: Chat UI components (`chat_panel.dart`, `search_result_carousel.dart`, `audio_wave.dart`).
+-   **`lib/features/dashboard/`**: Main screen layout and camera interactions (`dashboard_screen.dart`, `camera_overlay_view.dart`).
+-   **`lib/features/settings/`**: Host configuration and settings screens (`config_screen.dart`).
+-   **`lib/main.dart`**: Entry point and routing configuration.
 
 ### How it Works
 
@@ -30,11 +36,11 @@ The application is built using the **MVVM-like** pattern (Model-View-Provider):
     -   The app overlays the mask on top of the camera feed.
 
 2.  **Voice & Chat**:
-    -   `VoiceController` initializes the microphone.
-    -   It monitors amplitude to detect speech (VAD).
-    -   When speech ends (silence > 1.5s), it stops recording and uploads the audio to `http://<HOST_IP>:8001/stt`.
+    -   `VoiceController` initializes the microphone and monitors VAD.
+    -   When speech ends (silence > 1.5s), it stops recording and uploads audio to `http://<HOST_IP>:8001/stt`.
     -   The returned text is sent to the Chat Agent (`/chat`).
-    -   The Agent streams the response text, which is parsed and displayed in `ChatPanel`.
+    -   The backend streams structured JSON responses which are parsed by the `ChatPanel`.
+    -   The app relies on Markdown rendering for text and uses specialized UI triggers, like popping up the Shopping Carousel when receiving `search_result` streams.
 
 ## Prerequisites
 
@@ -60,9 +66,9 @@ The application is built using the **MVVM-like** pattern (Model-View-Provider):
 1.  **Find your PC's IP**: Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux).
 2.  **Start the App**:
     ```bash
-    flutter run -d ipad
+    flutter run -d DEVICE_ID
     ```
-    *(Replace `ipad` with your device ID if needed).*
+    *(Replace `DEVICE_ID` with your device ID if needed).*
 
 3.  **Connect**:
     -   On the launch screen, enter your PC's IP (e.g., `192.168.1.5`).
