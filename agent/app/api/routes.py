@@ -2,16 +2,18 @@ import json
 import io
 import logging
 import uuid
-from fastapi import APIRouter, UploadFile, File, Query
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Query, Header
 from fastapi.responses import StreamingResponse, Response
 from langchain_core.messages import HumanMessage, AIMessage
 import httpx
 
-from app.core.config import settings
+from app.core.config import settings, langfuse_handler
 from app.core.models import ChatRequest, PatientInfo
 from app.services.agent_graph import agent_service
 from app.services.stt_service import stt_service
 from langgraph.types import Command
+from langfuse import observe, propagate_attributes
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -63,7 +65,11 @@ async def speech_to_text(file: UploadFile = File(...)):
         return {"error": str(e), "text": ""}
 
 @router.post("/chat/{thread_id}")
-async def chat_endpoint(request: ChatRequest, thread_id:str):
+async def chat_endpoint(
+    request: ChatRequest, 
+    thread_id:str,
+    x_uid: Optional[str] = Header(None),
+):
     """
     Streaming endpoint for the medical agent.
     """
@@ -88,11 +94,15 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
     # Check if state exists for this thread
     app_graph = agent_service.get_graph()
     config = {
+        "callbacks": [],
         "configurable": {
             "thread_id": thread_id,
             "run_id": str(uuid.uuid4())
         }
     }
+
+    if langfuse_handler is not None:
+        config["callbacks"].append(langfuse_handler)
 
     # Fetch current state
     current_state = await app_graph.aget_state(config)
@@ -115,160 +125,168 @@ async def chat_endpoint(request: ChatRequest, thread_id:str):
         }
 
     # 3. Stream Generator
+    @observe()
     async def event_generator():
-        try:
-            # app_graph and config are already defined in outer scope
-            
-            logger.info(f"CHAT: Starting astream for thread_id={thread_id}")
-            
-            # State tracking
-            is_model_reasoning = False
-            collected_content = {"thinking": [], "plan": [], "text": [], "decision": []}
-
-            # Check for existing interrupts
-            snapshot = await app_graph.aget_state(config)
-            
-            if snapshot.next and len(snapshot.tasks) > 0 and snapshot.tasks[0].interrupts:
-                 # Resume from interrupt
-                logger.info(f"CHAT: Resuming from interrupt for thread_id={thread_id}")
-                # The user's message IS the answer/resume value
-                # We use the raw message content as the resume value
-                runner = app_graph.astream(
-                    Command(resume={
-                        "interrupt_response": request.message,
-                        "run_id": request.run_id
-                    }), 
-                    config=config, 
-                    stream_mode=["messages", "updates"]
-                )
-            else:
-                # Start new run
-                logger.info(f"CHAT: Starting new run for thread_id={thread_id}")
-                runner = app_graph.astream(inputs, config=config, stream_mode=["messages", "updates"])
-
-            async for chunk in runner:
-                mode, data = chunk
-                
-                if mode == "messages":
-                    message_chunk, metadata = data
-                    content = message_chunk.content
-                    
-                    if content:
-                        # Determine message type based on Node
-                        node_name = metadata.get("langgraph_node")
-                        
-                        # Default to 'text' (visible in chat)
-                        msg_type = "text"
-                        
-                        # Debug logging to identify node names and tags
-                        logger.info(f"CHAT MSG: Node={node_name}, Tags={metadata.get('tags')}")
-
-                        # Nodes that should NOT appear in chat bubble
-                        if node_name in ["thinking", "routing", "definite_diagnosis", "diagnosis_process"]:
-                            msg_type = "thinking"
-                        
-                        # Check tags for definite_diagnosis (since it's in a subgraph)
-                        tags = metadata.get("tags", [])
-                        if "definite_diagnosis" in tags:
-                            msg_type = "thinking"
-                        elif node_name in ["asker", "evaluation", "ask_treatment"]:
-                            msg_type = "decision"
-                            
-                        # Also check for reasoning tags (DeepSeek style) just in case
-                        if "<think>" in content or "<unused94>" in content:
-                            is_model_reasoning = True
-                            # Notify UI start of reasoning
-                            yield f"data: {json.dumps({'type': 'task', 'content': 'Thinking...'})}\n\n"
-                        
-                        if is_model_reasoning:
-                            msg_type = "thinking"  # Hide reasoning content
-                            
-                        if "</think>" in content or "<unused95>" in content:
-                            is_model_reasoning = False
-                        
-                        collected_content[msg_type].append(content) if msg_type in collected_content else None
-                        print(f"CHAT: {msg_type}: {content}")
-                        yield f"data: {json.dumps({'type': msg_type, 'content': content})}\n\n"
-                    continue
-
-                # --- MODE: UPDATES (State Changes & Interrupts) ---
-                elif mode == "updates":
-                    # Best Practice: Handle interrupts explicitly from the updates stream
-                    interrupt = data.get("__interrupt__")
-                    if interrupt:
-                        interrupt, = interrupt
-
-                        yield f"data: {json.dumps({'type': 'interrupt', 'content': interrupt.value})}\n\n"
-                        continue
-                    
-                    # Handle Node Updates
-                    # 1. Thinking Node - Extract Plan
-                    if "thinking" in data:
-                        output = data["thinking"]
-                        plan = None
-                        if output:
-                            # Handle Pydantic V1 (.dict()) or plain dict or object attr
-                            if hasattr(output, 'todo'):
-                                plan = output.todo
-                            elif isinstance(output, dict):
-                                plan = output.get('todo')
-                                if not plan and 'todo' in output: 
-                                    plan = output['todo']
-                        
-                        if plan:
-                             collected_content["plan"].append(json.dumps(plan))
-                             yield f"data: {json.dumps({'type': 'task', 'content': plan})}\n\n"
-
-                    # 2. Interview Node - Extract Profile
-                    if "interview" in data:
-                        output = data["interview"]
-                        updates = {}
-                        
-                        data_src = output
-                        if hasattr(output, 'dict'):
-                             data_src = output.dict()
-                        
-                        if isinstance(data_src, dict):
-                            # Use PatientInfo fields dynamically
-                            for key in PatientInfo.__fields__.keys():
-                                val = data_src.get(key)
-                                if val and val != "__MISSING__":
-                                    updates[key] = val
-
-                        if updates:
-                            yield f"data: {json.dumps({'type': 'profile_update', 'content': updates})}\n\n"
-
-                    # 3. Shopping Node - Emit raw search results to client
-                    if "shopping_search" in data:
-                        output = data["shopping_search"]
-                        if isinstance(output, dict):
-                            # (Messages are already streamed automatically by the 'messages' stream mode)
-                            
-                            # Process search results
-                            results = output.get("search_results", "")
-                            if results:
-                                # Ensure we are passing a string to match the frontend regex parsing
-                                if hasattr(results, 'content'):
-                                    results_str = results.content
-                                else:
-                                    results_str = str(results)
-                                yield f"data: {json.dumps({'type': 'search_result', 'content': results_str})}\n\n"
-                            else:
-                                yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
-
-            # --- FINAL OUTPUT ---
-            debug_payload = {
-                "thinking": "".join(collected_content["thinking"]),
-                "plan": ", ".join(collected_content["plan"]),
-                "text": "".join(collected_content["text"]),
-                "decision": "".join(collected_content["decision"])
+        with propagate_attributes(
+            session_id=thread_id,
+            user_id=x_uid if x_uid is not None else "unknown_user",
+            metadata={
+                "run_id": config["configurable"]["run_id"]
             }
-            yield f"data: {json.dumps({'type': 'debug', 'content': json.dumps(debug_payload)})}\n\n"
-            yield "data: [DONE]\n\n"
-            
-        except Exception as e:
-            logger.error(f"CHAT: Error in event_generator: {e}", exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            yield "data: [DONE]\n\n"
+        ):
+            try:
+                # app_graph and config are already defined in outer scope
+                
+                logger.info(f"CHAT: Starting astream for thread_id={thread_id}")
+                
+                # State tracking
+                is_model_reasoning = False
+                collected_content = {"thinking": [], "plan": [], "text": [], "decision": []}
+
+                # Check for existing interrupts
+                snapshot = await app_graph.aget_state(config)
+                
+                if snapshot.next and len(snapshot.tasks) > 0 and snapshot.tasks[0].interrupts:
+                    # Resume from interrupt
+                    logger.info(f"CHAT: Resuming from interrupt for thread_id={thread_id}")
+                    # The user's message IS the answer/resume value
+                    # We use the raw message content as the resume value
+                    runner = app_graph.astream(
+                        Command(resume={
+                            "interrupt_response": request.message,
+                            "run_id": request.run_id
+                        }), 
+                        config=config, 
+                        stream_mode=["messages", "updates"]
+                    )
+                else:
+                    # Start new run
+                    logger.info(f"CHAT: Starting new run for thread_id={thread_id}")
+                    runner = app_graph.astream(inputs, config=config, stream_mode=["messages", "updates"])
+
+                async for chunk in runner:
+                    mode, data = chunk
+                    
+                    if mode == "messages":
+                        message_chunk, metadata = data
+                        content = message_chunk.content
+                        
+                        if content:
+                            # Determine message type based on Node
+                            node_name = metadata.get("langgraph_node")
+                            
+                            # Default to 'text' (visible in chat)
+                            msg_type = "text"
+                            
+                            # Debug logging to identify node names and tags
+                            logger.info(f"CHAT MSG: Node={node_name}, Tags={metadata.get('tags')}")
+
+                            # Nodes that should NOT appear in chat bubble
+                            if node_name in ["thinking", "routing", "definite_diagnosis", "diagnosis_process"]:
+                                msg_type = "thinking"
+                            
+                            # Check tags for definite_diagnosis (since it's in a subgraph)
+                            tags = metadata.get("tags", [])
+                            if "definite_diagnosis" in tags:
+                                msg_type = "thinking"
+                            elif node_name in ["asker", "evaluation", "ask_treatment"]:
+                                msg_type = "decision"
+                                
+                            # Also check for reasoning tags (DeepSeek style) just in case
+                            if "<think>" in content or "<unused94>" in content:
+                                is_model_reasoning = True
+                                # Notify UI start of reasoning
+                                yield f"data: {json.dumps({'type': 'task', 'content': 'Thinking...'})}\n\n"
+                            
+                            if is_model_reasoning:
+                                msg_type = "thinking"  # Hide reasoning content
+                                
+                            if "</think>" in content or "<unused95>" in content:
+                                is_model_reasoning = False
+                            
+                            collected_content[msg_type].append(content) if msg_type in collected_content else None
+                            print(f"CHAT: {msg_type}: {content}")
+                            yield f"data: {json.dumps({'type': msg_type, 'content': content})}\n\n"
+                        continue
+
+                    # --- MODE: UPDATES (State Changes & Interrupts) ---
+                    elif mode == "updates":
+                        # Best Practice: Handle interrupts explicitly from the updates stream
+                        interrupt = data.get("__interrupt__")
+                        if interrupt:
+                            interrupt, = interrupt
+
+                            yield f"data: {json.dumps({'type': 'interrupt', 'content': interrupt.value})}\n\n"
+                            continue
+                        
+                        # Handle Node Updates
+                        # 1. Thinking Node - Extract Plan
+                        if "thinking" in data:
+                            output = data["thinking"]
+                            plan = None
+                            if output:
+                                # Handle Pydantic V1 (.dict()) or plain dict or object attr
+                                if hasattr(output, 'todo'):
+                                    plan = output.todo
+                                elif isinstance(output, dict):
+                                    plan = output.get('todo')
+                                    if not plan and 'todo' in output: 
+                                        plan = output['todo']
+                            
+                            if plan:
+                                collected_content["plan"].append(json.dumps(plan))
+                                yield f"data: {json.dumps({'type': 'task', 'content': plan})}\n\n"
+
+                        # 2. Interview Node - Extract Profile
+                        if "interview" in data:
+                            output = data["interview"]
+                            updates = {}
+                            
+                            data_src = output
+                            if hasattr(output, 'dict'):
+                                data_src = output.dict()
+                            
+                            if isinstance(data_src, dict):
+                                # Use PatientInfo fields dynamically
+                                for key in PatientInfo.__fields__.keys():
+                                    val = data_src.get(key)
+                                    if val and val != "__MISSING__":
+                                        updates[key] = val
+
+                            if updates:
+                                yield f"data: {json.dumps({'type': 'profile_update', 'content': updates})}\n\n"
+
+                        # 3. Shopping Node - Emit raw search results to client
+                        if "shopping_search" in data:
+                            output = data["shopping_search"]
+                            if isinstance(output, dict):
+                                # (Messages are already streamed automatically by the 'messages' stream mode)
+                                
+                                # Process search results
+                                results = output.get("search_results", "")
+                                if results:
+                                    # Ensure we are passing a string to match the frontend regex parsing
+                                    if hasattr(results, 'content'):
+                                        results_str = results.content
+                                    else:
+                                        results_str = str(results)
+                                    yield f"data: {json.dumps({'type': 'search_result', 'content': results_str})}\n\n"
+                                else:
+                                    yield f"data: {json.dumps({'type': 'tool', 'content': 'Search Completed'})}\n\n"
+
+                # --- FINAL OUTPUT ---
+                debug_payload = {
+                    "thinking": "".join(collected_content["thinking"]),
+                    "plan": ", ".join(collected_content["plan"]),
+                    "text": "".join(collected_content["text"]),
+                    "decision": "".join(collected_content["decision"])
+                }
+                yield f"data: {json.dumps({'type': 'debug', 'content': json.dumps(debug_payload)})}\n\n"
+                yield "data: [DONE]\n\n"
+                
+            except Exception as e:
+                logger.error(f"CHAT: Error in event_generator: {e}", exc_info=True)
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

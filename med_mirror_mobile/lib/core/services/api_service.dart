@@ -45,6 +45,8 @@ class ApiService {
       String? imageUrl,
       String? runId}) async* {
     final client = _client ?? http.Client();
+    final mockUserId = "4b3d2199-53a9-4303-82c1-eb398751d14f";
+
     try {
       final payload = {
         'message': text,
@@ -60,6 +62,7 @@ class ApiService {
       final directUri = Uri.parse('$agentBaseUrl/chat/$threadId');
 
       final req = http.Request('POST', directUri);
+      req.headers['x-uid'] = mockUserId;
       req.headers['Content-Type'] = 'application/json';
       req.body = jsonEncode(payload);
 

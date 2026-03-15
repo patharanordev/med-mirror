@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.core.config import settings, langfuse
 from app.api.routes import router as api_router
 
 from contextlib import asynccontextmanager
@@ -15,8 +15,14 @@ async def lifespan(app: FastAPI):
     print("LIFESPAN: Triggering Background Warmup...")
     asyncio.create_task(asyncio.to_thread(stt_service.load_model))
     asyncio.create_task(agent_service.warmup())
+
     yield
+
     # Shutdown logic (if any)
+    if langfuse is not None:
+        langfuse.flush()
+        langfuse.shutdown()
+
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)

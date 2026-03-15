@@ -38,31 +38,53 @@ Optimized for speed and lower resource usage (e.g., local laptops, edge devices)
 
 **Configuration (.env):**
 ```bash
+# ------------------------------------------------------------------------------
+# App Configs
+
+# Choose workflow that match with your device
 ACTIVE_WORKFLOW=med_gemma_4b
 
-# LLM Server Configuration (e.g., local Ollama)
-LLM_BASE_URL=http://localhost:11434/v1
+# STT Settings (Whisper model: tiny, tiny.en, base, base.en, small, small.en, medium, large-v2, large-v3)
+# Use ".en" suffix for English-only models (faster but English only)
+STT_MODEL_SIZE=large-v3
+
+# Agent Language (th = Thai, en = English)
+AGENT_LANGUAGE=th
+
+# ------------------------------------------------------------------------------
+# LLM
+
+LLM_BASE_URL=http://ollama:11434/v1
 LLM_API_KEY=ollama
 
-# Model Configuration
+# For MedGemma on small edge computing
 LLM_MODEL=gemma3n:e4b
 LLM_MODEL_DIAGNOSIS=medgemma-1.5:4b
 LLM_MODEL_WITH_TOOL_CALL=qwen3:4b
 
-# STT (Speech-to-Text) Settings
-STT_MODEL_SIZE=large-v3
+# # For MedGemma with high accuracy
+# LLM_MODEL=qwen3:8b
+# LLM_MODEL_DIAGNOSIS=medgemma:27b
 
-# Agent Language (th = Thai, en = English)
-AGENT_LANGUAGE=en
+# ------------------------------------------------------------------------------
+# Tracing (Supports both, priority depends on env vars)
 
-# External APIs
-TAVILY_API_KEY=your_tavily_api_key
+# Langfuse (Explicitly initialized in app/core/config.py)
+LANGFUSE_SECRET_KEY="sk-lf-be...19a07"
+LANGFUSE_PUBLIC_KEY="pk-lf-ef...bfc9"
+LANGFUSE_BASE_URL="http://localhost:33000"
 
-# (Optional) LangSmith Tracing
+# LangSmith (Implicitly supported via LangChain env vars)
 LANGSMITH_TRACING=true
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_API_KEY=lsv2_pt_f5...60e92
 LANGSMITH_PROJECT="MedMirror"
+
+# ------------------------------------------------------------------------------
+# Tools
+
+# Tavily
+TAVILY_API_KEY=tvly-dev-1BdX...MAnS
 ```
 
 | Workflow for MedGemma1.5:4b | Diagnosis Subgraph |

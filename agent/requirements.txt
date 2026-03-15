@@ -4,6 +4,7 @@ langchain
 langchain_openai
 langchain_community
 langgraph
+langfuse
 tavily-python
 pydantic
 python-dotenv

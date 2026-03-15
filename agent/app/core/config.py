@@ -1,5 +1,7 @@
-import os
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
+
+from langfuse import get_client
+from langfuse.langchain import CallbackHandler
 
 # Multi-language System Prompts
 SYSTEM_PROMPTS = {
@@ -52,6 +54,11 @@ class Settings(BaseSettings):
     # Supported: "th" (Thai), "en" (English)
     AGENT_LANGUAGE: str = "th"
 
+    # Langfuse Settings
+    LANGFUSE_SECRET_KEY: str = "sk-lf-be5...a07"
+    LANGFUSE_PUBLIC_KEY: str = "pk-lf-ef0...fc9"
+    LANGFUSE_BASE_URL: str = "http://localhost:33000"
+
     def get_system_prompt(self) -> str:
         """Get the base persona prompt for the agent."""
         # This prompt establishes the persona.
@@ -62,3 +69,19 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+try:
+    # Initialize Langfuse client
+    langfuse = get_client()
+
+    # Initialize Langfuse CallbackHandler for Langchain (tracing)
+    langfuse_handler = CallbackHandler()
+
+    # Verify connection
+    if langfuse.auth_check():
+        print("Langfuse client is authenticated and ready!")
+    else:
+        print("Authentication failed. Please check your credentials and host.")
+except Exception as e:
+    print(f"Failed to initialize Langfuse: {e}")
+    langfuse = None
+    langfuse_handler = None

@@ -1,22 +1,7 @@
 services:
-  # ---------------------------------------------------------
-  # 1. Frontend: The Web Interface (deprecated)
-  # ---------------------------------------------------------
-  frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
-    container_name: med_mirror_frontend
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    networks:
-      - edge_net
-    environment:
-      - AGENT_SERVICE_URL=http://med_mirror_agent:8001
 
   # ---------------------------------------------------------
-  # 2. Skin Segmentation Service (NVIDIA Optimized)
+  # 1. Skin Segmentation Service (NVIDIA Optimized)
   # ---------------------------------------------------------
   segmentation:
     build: 
@@ -27,7 +12,7 @@ services:
     ports:
       - "8000:8000"
     networks:
-      - edge_net
+      - ecosystem_commonnet
     volumes:
       - ./models:/app/models
     environment:
@@ -37,7 +22,7 @@ services:
       # For now assuming CPU fallback or standard CUDA if base image supports it
 
   # ---------------------------------------------------------
-  # 3. Medical Agent Service (LangGraph)
+  # 2. Medical Agent Service (LangGraph)
   # ---------------------------------------------------------
   agent:
     build:
@@ -48,7 +33,7 @@ services:
     ports:
       - "8001:8001"
     networks:
-      - edge_net
+      - ecosystem_commonnet
     volumes:
       - ./hf_cache:/root/.cache/huggingface
       - ./agent:/app
@@ -65,7 +50,7 @@ services:
               capabilities: [gpu]
 
   # ---------------------------------------------------------
-  # 4. Local LLM Backend (Ollama)
+  # 3. Local LLM Backend (Ollama)
   # ---------------------------------------------------------
   ollama:
     image: ollama/ollama:latest
@@ -74,7 +59,6 @@ services:
     ports:
       - "11434:11434"
     networks:
-      - edge_net
       - ecosystem_commonnet
     volumes:
       - ~/.ollama:/root/.ollama
@@ -88,8 +72,6 @@ services:
               capabilities: [gpu]
 
 networks:
-  edge_net:
-    driver: bridge
   ecosystem_commonnet:
     name: commonnet
     external: true
