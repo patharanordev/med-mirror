@@ -1,0 +1,29 @@
+# Use official Python 3.11 slim image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Set the working directory
+WORKDIR /workspace
+
+# Install system dependencies if needed (build-essential for some packages)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.eval.txt .
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install -r requirements.eval.txt
+
+# The application code will be mounted as a volume in docker-compose
+# but we can copy it for a standalone image if needed.
+# For now, we follow the docker-compose.eval.yml pattern.
+
+# Default command removed as requested (can be specified via docker-compose or docker run)
+# CMD ["python", "eval_multi_turn_conv.py"]

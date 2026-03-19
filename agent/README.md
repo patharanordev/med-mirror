@@ -176,6 +176,85 @@ This replaces the previous "Human-in-the-Loop" question node, providing a smooth
 
 ## Testing
 
+### Evaluation
+
+Please refer to `docker-compose.eval.yml` at the root of this project.
+
+For WinOS:
+
+```bash
+start_eval.bat
+```
+
+For Linux:
+
+```bash
+docker compose -f docker-compose.eval.yml up --build
+```
+
+Output:
+
+```sh
+eval-agent  | tests/evals/test_thinking.py::test_accuracy_passes
+eval-agent  | -------------------------------- live log call ---------------------------------
+eval-agent  | INFO     root:test_thinking.py:54
+eval-agent  |
+eval-agent  | output: {"analysis": "User is describing symptoms of panda eyes (dark circles under the eyes) and asking for medical advice. This indicates a potential diagnosis.", "next_step": "diagnosis", "language": "Thai", "shopping_intent": true}
+eval-agent  | INFO     root:test_thinking.py:55
+eval-agent  |
+eval-agent  | expected_output:
+eval-agent  | ```json
+eval-agent  | {
+eval-agent  |   "next_step": "diagnosis",
+eval-agent  |   "language": "Thai",
+eval-agent  |   "shopping_intent": true,
+eval-agent  |   "reasoning": "The user is asking for medication for dark circles under the eyes, indicating a potential medical concern and a desire to purchase a remedy. This suggests a shopping intent related to medicine or skincare products."
+eval-agent  | }
+eval-agent  | ```
+eval-agent  |
+eval-agent  | INFO     root:test_thinking.py:60
+eval-agent  |
+eval-agent  | output: {"analysis": "User is describing symptoms of panda eyes (dark circles under the eyes) and asking for medical advice. This indicates a potential diagnosis.", "next_step": "diagnosis", "language": "Thai", "shopping_intent": true}
+eval-agent  | INFO     root:test_thinking.py:69
+eval-agent  |
+eval-agent  | expected_output: {
+eval-agent  |   "next_step": "diagnosis",
+eval-agent  |   "language": "Thai",
+eval-agent  |   "shopping_intent": true,
+eval-agent  |   "reasoning": "The user is asking for medication for dark circles under the eyes, indicating a potential medical concern and a desire to purchase a remedy. This suggests a shopping intent related to medicine or skincare products."
+eval-agent  | }
+eval-agent  | INFO     root:test_thinking.py:115 Individual Results: Hidden (1 items)
+eval-agent  | 💡 Set include_item_results=True to view them
+eval-agent  |
+eval-agent  | ──────────────────────────────────────────────────
+eval-agent  | 🧪 Experiment: Dark Circle Test - Should Pass
+eval-agent  | 📋 Run name: Dark Circle Test - Should Pass - 2026-03-19T12:10:17.989436Z - Testing dark circle case conversation
+eval-agent  | 1 items
+eval-agent  | Evaluations:
+eval-agent  |   • accuracy
+eval-agent  |
+eval-agent  | Average Scores:
+eval-agent  |   • accuracy: 0.750
+eval-agent  |
+eval-agent  | Run Evaluations:
+eval-agent  |   • avg_accuracy: 0.750
+eval-agent  |     💭 Average accuracy: 75.00%
+eval-agent  |
+eval-agent  | INFO     root:test_thinking.py:123 0.75
+eval-agent  | PASSED
+eval-agent  |
+eval-agent  | ========================= 1 passed in 64.78s (0:01:04) =========================
+eval-agent exited with code 0
+Aborting on container exit...
+[+] Stopping 2/2 Desktop   o View Config   w Enable Watch
+ ✔ Container eval-agent  Stopped                                                                                   0.0s
+ ✔ Container ollama      Stopped                                                                                   0.3s
+
+Evaluation finished. All services stopped.
+```
+
+### Functional/Unit Tests
+
 > ---
 > **NOTE**: Some test scripts require Ollama to be running locally. Make sure Ollama is running before running the tests.
 >

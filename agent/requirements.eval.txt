@@ -1,0 +1,11 @@
+langchain-core
+pydantic-ai[mcp]
+langfuse
+openai
+nest_asyncio
+aiohttp
+python-dotenv
+pandas
+tqdm
+pytest
+openevals

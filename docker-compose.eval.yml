@@ -1,0 +1,41 @@
+services:
+
+  eval-agent:
+    container_name: eval-agent
+    build:
+      context: ./agent
+      dockerfile: Dockerfile.eval
+    env_file:
+      - ./agent/.env.eval
+    command: ["python", "-m", "pytest", "--log-cli-level=INFO", "/workspace/tests/evals/test_thinking.py"]
+    volumes:
+      - ./agent:/workspace
+    depends_on:
+      - ollama
+    networks:
+      - ecosystem_commonnet
+    restart: "no"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: "no"
+    ports:
+      - "11434:11434"
+    networks:
+      - ecosystem_commonnet
+    volumes:
+      - ~/.ollama:/root/.ollama
+    # GPU Support for Windows (WSL2 / NVIDIA Container Toolkit)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+networks:
+  ecosystem_commonnet:
+    name: commonnet
+    external: true

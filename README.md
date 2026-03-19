@@ -12,6 +12,9 @@ MedMirror is an intelligent, real-time medical analysis platform that transforms
 - [Cross Platform Application](./med_mirror_mobile/README.md)
 - [Skin Detection](./segmentation/README.md) (in-progress)
 - [APIs](./apis/README.md)
+- [Observability](./observability/README.md)
+
+![overview](./assets/overview.jpg)
 
 ---
 
