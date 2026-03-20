@@ -1,7 +1,7 @@
 # Ref. https://langfuse.com/guides/cookbook/example_evaluating_multi_turn_conversations
 from langfuse import observe, Evaluation
 from .evals.utils.langfuse_client import LangfuseClient
-from .evals.datasets.dark_circle import local_data
+from .evals.datasets.thinking import local_data
 from prompts.thinking import system_message
 from models.graph_states.thinking_result_simple import ThinkingResultSimple
 from langchain_core.output_parsers import JsonOutputParser
