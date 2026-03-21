@@ -6,32 +6,10 @@ import os, pytest, json, logging
 from langfuse import observe, Evaluation
 from tests.evals.utils.langfuse_client import LangfuseClient
 from tests.evals.datasets.thinking import local_data
-from app.prompts.thinking import system_message
+from app.prompts.thinking import get_system_message
 from app.models.graph_states.thinking_result_simple import ThinkingResultSimple
 from langchain_core.output_parsers import JsonOutputParser
 from openevals.llm import create_llm_as_judge
-
-# THINKING_ANALYSIS_JUDGE_PROMPT = """
-# You are an expert medical intent analyzer evaluator. Your task is to assess the quality of an LLM's reasoning (analysis) compared to a reference analysis.
-
-# Input: {{inputs}}
-# LLM Output Analysis: {{outputs}}
-# Reference Analysis: {{reference_outputs}}
-
-# Assign a score of 0, 0.25, 0.5, 0.75, or 1 based on the following criteria:
-
-# - 0: The analysis is entirely incorrect, irrelevant, or hallucinates symptoms not present in the input.
-# - 0.25: The analysis identifies the core medical concern/symptom but fails to justify the routing or shopping intent.
-# - 0.5: The analysis identifies the concern and provides a partial or slightly flawed justification for the routing or shopping intent.
-# - 0.75: The analysis is mostly correct, identifying the concern and providing logical justification for both routing and shopping intent, with only minor omissions or minor lack of clarity.
-# - 1: The analysis is comprehensive, perfectly accurate, and aligns with the reference logic for routing and shopping intent.
-
-# Provide your feedback in the following format:
-# {{
-#   "score": <score>,
-#   "reasoning": "<brief explanation of the score>"
-# }}
-# """
 
 os.environ["OPENAI_BASE_URL"] = "http://ollama:11434/v1"
 os.environ["OPENAI_API_KEY"] = "ollama"
@@ -92,34 +70,44 @@ judge = create_llm_as_judge(
     prompt=THINKING_ANALYSIS_JUDGE_PROMPT,
 )
 
-# ------------------------------------------------------------------
-
 @pytest.fixture
 def langfuse_client():
     """Initialize Langfuse client for testing"""
     return lfc.langfuse if lfc.langfuse is not None else None
 
+# ------------------------------------------------------------------
+
 def is_langfuse_available():
     return lfc.langfuse is not None
 
-def task(*, item, **kwargs):
-    question = item["input"]
+def setup_prompt(lfc, item):
+    # item reference to dataset item
+    question = item.input
 
+    # load prompt from langfuse if exists, 
+    # otherwise upsert prompt to langfuse to record it to be an evident
+    prompt = lfc.load_prompt(
+        "med-mirror/thinking/system-message", 
+        prompt_type='chat', 
+        prompt=[get_system_message()],
+        labels=['production']
+    )
+    # assign to template
+    prompt = prompt.compile(
+        context="No context", 
+        format_instructions=parser.get_format_instructions()
+    )
+    prompt.append({"role": "user", "content": question})
+    logging.info(f"\n\nPrompt: {prompt}")
+    return prompt
+
+def task(*, item, **kwargs):
     if not is_langfuse_available():
         return "Langfuse is not available"
 
     response = lfc.client.chat.completions.create(
         model=interview_model,
-        messages=[
-            { 
-                "role": "system", 
-                "content": system_message.format(
-                    context="No context", 
-                    format_instructions=parser.get_format_instructions()
-                )
-            },
-            { "role": "user", "content": question }
-        ],
+        messages=setup_prompt(lfc, item),
         temperature=0,
         max_tokens=2048
     )
@@ -127,6 +115,13 @@ def task(*, item, **kwargs):
     return response.choices[0].message.content
 
 def accuracy_evaluator(*, input, output, expected_output, **kwargs):
+    """
+    Evaluate the accuracy of output fields including 'next_step', 'language', 'shopping_intent' and 'analysis':
+
+    - 'analysis' is evaluated using LLM Judge because it is an analytical field.
+    - 'next_step', 'language', 'shopping_intent' are evaluated using exact match.
+    """
+
     # Ensure inputs are dicts (parsing logic from previous steps)
     if isinstance(output, str):
         output = json.loads(output.replace("```json", "").replace("```", "").strip())
@@ -182,10 +177,10 @@ def average_accuracy_evaluator(*, item_results, **kwargs):
 
 def test_accuracy_passes(langfuse_client):
     """Test that passes when accuracy is above threshold"""
-    result = langfuse_client.run_experiment(
-        name="Dark Circle Test - Should Pass",
-        description="Testing dark circle case conversation",
-        data=local_data,
+    dataset = lfc.load_dataset(name="med-mirror/thinking", local_data=local_data)
+    result = dataset.run_experiment(
+        name="Thinking Test - Should Pass",
+        description="Testing all thinking cases",
         task=task,
         evaluators=[accuracy_evaluator],
         run_evaluators=[average_accuracy_evaluator]

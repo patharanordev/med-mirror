@@ -1,8 +1,8 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
 from app.core.models import AgentState
 
-from app.prompts.thinking import system_message
+from app.prompts.thinking import get_system_message
 from app.models.graph_states import ThinkingResultSimple
 
 class ThinkingNode:
@@ -15,8 +15,17 @@ class ThinkingNode:
         from langchain_core.output_parsers import JsonOutputParser
         parser = JsonOutputParser(pydantic_object=ThinkingResultSimple)
 
+        system_message = get_system_message()
+
+        # Tell LangChain to interpret them using "jinja2" instead of the default
+        # This allows you to use {{variable}} syntax inside your prompt string
+        system_prompt = SystemMessagePromptTemplate.from_template(
+            system_message.get('content'), 
+            template_format="jinja2"
+        )
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_message),
+            system_prompt,
             MessagesPlaceholder("messages"),
         ])
 

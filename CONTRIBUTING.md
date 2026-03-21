@@ -2,6 +2,25 @@
 
 ## Evaluation
 
+For this part, I used [openevals](https://github.com/langchain-ai/openevals) with Ollama. Qwen3 is used as a judge model `openai:qwen3:4b`.
+
+Please set up the environment variables below, point to your Ollama base URL:
+
+```py
+import os
+os.environ["OPENAI_BASE_URL"] = "http://ollama:11434/v1"
+os.environ["OPENAI_API_KEY"] = "ollama"
+```
+
+For this evaluation in each workflow, I used the following models:
+
+- general/interview model: `gemma3n:e4b`
+- diagnosis model: `medgemma-1.5:4b`
+
+You can see an example in [test thinking node](tests/evals/test_thinking.py).
+
+### Start Evaluation
+
 Please refer to `docker-compose.eval.yml` at the root of this project.
 
 For WinOS:

@@ -14,6 +14,7 @@ services:
       - ollama
     networks:
       - ecosystem_commonnet
+    tty: true
     restart: "no"
 
   ollama:
@@ -26,6 +27,7 @@ services:
       - ecosystem_commonnet
     volumes:
       - ~/.ollama:/root/.ollama
+    tty: true
     # GPU Support for Windows (WSL2 / NVIDIA Container Toolkit)
     deploy:
       resources:
