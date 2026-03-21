@@ -7,7 +7,11 @@ services:
       dockerfile: Dockerfile.eval
     env_file:
       - ./agent/.env.eval
-    command: ["python", "-m", "pytest", "--log-cli-level=INFO", "/workspace/tests/evals/test_thinking.py"]
+    command: [
+      "python", "-m", "pytest", "--log-cli-level=INFO", 
+      "/workspace/tests/evals/test_thinking.py",
+      "/workspace/tests/evals/test_definite_diagnosis.py",
+    ]
     volumes:
       - ./agent:/workspace
     depends_on:

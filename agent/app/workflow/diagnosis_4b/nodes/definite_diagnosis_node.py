@@ -1,6 +1,7 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
 from app.core.models import AgentState
+from app.prompts.definite_diagnosis import get_system_message
 
 class DefiniteDiagnosisNode:
     def __init__(self, llm):
@@ -9,32 +10,14 @@ class DefiniteDiagnosisNode:
     async def __call__(self, state: AgentState, config: RunnableConfig):
         print("--- DIAGNOSIS 4B: DEFINITE DIAGNOSIS NODE ---")
         
-        system_msg = """
-        ### ROLE
-        You are an expert Dermatologist (MedMirror AI). 
-        You have collected all necessary patient information.
-        Now provide a DEFINITE DIAGNOSIS based on the evidence.
-        
-        IMPORTANT: You MUST answer in the user's language: {language}. 
-        Do NOT provide translations or dual-language output.
-
-        ### TASK
-        1. Analyze this context:
-        {context}
-
-
-        2. Provide the final identification of the disease/condition.
-        3. Explain your reasoning briefly.
-        4. Recommend next steps (treatment or consultation).
-
-        ### OUTPUT FORMAT
-        - Standard text or Markdown.
-        - Be professional, empathetic, and clear.
-        - Structure your answer with clear headings if necessary.
-        """
+        system_message = get_system_message()
+        system_prompt = SystemMessagePromptTemplate.from_template(
+            system_message.get('content'), 
+            template_format="jinja2"
+        )
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_msg),
+            system_prompt,
             MessagesPlaceholder("messages"),
         ])
         

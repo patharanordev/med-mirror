@@ -30,40 +30,58 @@ class LangfuseClient:
         except Exception as e:
             logging.error(f"Failed to initialize Langfuse: {e}")
 
-    def flush(self):
+    def load_dataset(self, name: str, local_data: list):
         self.langfuse.flush()
 
-    def load_dataset(self, name, local_data:list=[]):
         try:
-            return self.langfuse.get_dataset(name=name)
-        except Exception as e:
-            # Print the ACTUAL error to see what's really failing
-            logging.warning(f"Failed to get dataset '{name}'. Reason: {e}")
-            logging.info(f"Dataset '{name}' not found. Creating new...")
-            
-            # Explicitly create the dataset container first
+            # Temporary Clean-up: Always delete and recreate to clear dirty items
+            try:
+                self.langfuse.delete_dataset(name=name)
+                logging.info(f"Deleted existing dataset '{name}' for fresh start.")
+                self.langfuse.flush()
+            except Exception as e:
+                logging.debug(f"Dataset '{name}' not found or could not be deleted: {e}")
+
             self.langfuse.create_dataset(name=name)
+            dataset = self.langfuse.get_dataset(name=name)
+            logging.info(f"Successfully created fresh dataset '{name}'.")
+        except Exception as e:
+            logging.error(f"Failed during dataset fresh start '{name}': {e}")
+            return None
             
-            for data in local_data:
-                id = data.get('id')
-                input = data.get('input')
-                expected_output = data.get('expected_output')
-                metadata = data.get('metadata', {})
-                status = data.get('status', "ACTIVE")
-                if input and expected_output:
+        logging.info(f"Syncing {len(local_data)} items to dataset '{name}'...")
+        for data in local_data:
+            id = data.get('id')
+            input = data.get('input')
+            expected_output = data.get('expected_output')
+            metadata = data.get('metadata', {})
+            status = data.get('status', "ACTIVE")
+            if input and expected_output:
+                try:
+                    # Move id to metadata to avoid the 404 creation error seen in logs
+                    item_metadata = metadata.copy()
+                    if id:
+                        item_metadata['original_id'] = id
+
                     self.langfuse.create_dataset_item(
-                        id=id,
                         dataset_name=name,
                         input=input,
                         expected_output=expected_output,
-                        metadata=metadata,
+                        metadata=item_metadata,
                         status=status
                     )
+                    logging.debug(f"Successfully synced item (input hash: {hash(str(input))})")
+                except Exception as item_e:
+                    logging.debug(f"Item '{id}' sync skipped or failed (likely already exists): {item_e}")
 
-            # Ensure data is sent to the server before returning
-            self.langfuse.flush()
+        # Ensure data is sent to the server before returning
+        self.langfuse.flush()
 
-            return self.langfuse.get_dataset(name=name)
+        # Re-fetch to get updated items count
+        dataset = self.langfuse.get_dataset(name=name)
+        logging.info(f"Dataset '{name}' now has {len(dataset.items)} items.")
+
+        return dataset
 
     def load_prompt(self, name, prompt_type:str='chat', prompt:str|list=[], labels:list=[]):
         try:
