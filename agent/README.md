@@ -176,6 +176,8 @@ This replaces the previous "Human-in-the-Loop" question node, providing a smooth
 
 ## Testing
 
+### Functional/Unit Tests
+
 > ---
 > **NOTE**: Some test scripts require Ollama to be running locally. Make sure Ollama is running before running the tests.
 >
