@@ -252,14 +252,4 @@ python agent/tests/test_streaming.py
 
 ## Contributing
 
-### Tracing
-
-To monitor and debug your agentic workflows, MedMirror supports both **Langfuse** (recommended) and **LangSmith**.
-
-- [**Langfuse**](https://github.com/langfuse/langfuse): Our primary tracing and observability platform. It's open source LLM engineering platform: LLM Observability, metrics, evals, prompt management, playground, datasets. Integrates with OpenTelemetry, Langchain, OpenAI SDK, LiteLLM, and more. To enable, add your `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL` to your `.env` file. Please refer to [observability](./observability/README.md).
-
-   ![ex-langfuse](./assets/ex-langfuse.jpg)
-
-- [**LangSmith**](https://smith.langchain.com/): is also supported natively via LangChain. If you prefer using LangSmith, simply add your `LANGSMITH_API_KEY` and set `LANGSMITH_TRACING=true` in your `.env` file.
-
-   ![ex-langsmith](./assets/ex-langsmith.jpg)
+Please refer to [contributing](./CONTRIBUTING.md) for more details.
